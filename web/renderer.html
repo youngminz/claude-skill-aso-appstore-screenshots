@@ -124,9 +124,7 @@
       }
 
       .device-shell.iphone::before,
-      .device-shell.iphone::after,
-      .device-shell.ipad::before,
-      .device-shell.ipad::after {
+      .device-shell.iphone::after {
         content: "";
         position: absolute;
       }
@@ -150,27 +148,6 @@
         border-radius: calc(var(--device-radius) - 8px);
         box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
         pointer-events: none;
-      }
-
-      .device-shell.ipad::before,
-      .device-shell.ipad::after {
-        background: rgb(22 22 24);
-        border-radius: 3px;
-      }
-
-      .device-shell.ipad::before {
-        top: 420px;
-        right: -5px;
-        width: 5px;
-        height: 200px;
-      }
-
-      .device-shell.ipad::after {
-        top: 360px;
-        left: -5px;
-        width: 5px;
-        height: 320px;
-        box-shadow: 0 180px 0 0 rgb(22 22 24);
       }
 
       .screen {
