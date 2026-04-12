@@ -18,7 +18,7 @@ const profiles = {
     shellStyle: "iphone",
     deviceWidth: 1030,
     deviceHeight: 2800,
-    deviceY: 800,
+    deviceY: 700,
     bezel: 15,
     screenCornerRadius: 129,
     deviceCornerRadius: 144,
@@ -152,6 +152,7 @@ const typographyProfiles = {
     lang: "hi",
     textTransform: "none",
     lineHeightRatio: 1,
+    topOffset: 40,
     subtitleGapOffset: 56,
   },
   thai: {
