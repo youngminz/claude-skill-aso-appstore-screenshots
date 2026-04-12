@@ -15,12 +15,13 @@ const profiles = {
   "iphone-67": {
     canvasWidth: 1290,
     canvasHeight: 2796,
+    shellStyle: "iphone",
     deviceWidth: 1030,
     deviceHeight: 2800,
     deviceY: 720,
     bezel: 15,
-    screenCornerRadius: 62,
-    deviceCornerRadius: 77,
+    screenCornerRadius: 129,
+    deviceCornerRadius: 144,
     textTop: 200,
     verbSizeMax: 256,
     verbSizeMin: 150,
@@ -29,11 +30,11 @@ const profiles = {
     descLineGap: 24,
     maxTextWidth: Math.floor(1290 * 0.92),
     maxVerbWidth: Math.floor(1290 * 0.92),
-    framePath: path.join(rootDir, "assets", "device_frame.png"),
   },
   "ipad-13": {
     canvasWidth: 2064,
     canvasHeight: 2752,
+    shellStyle: "ipad",
     deviceWidth: 1760,
     deviceHeight: 2332,
     deviceY: 600,
@@ -48,7 +49,6 @@ const profiles = {
     descLineGap: 28,
     maxTextWidth: Math.floor(2064 * 0.84),
     maxVerbWidth: Math.floor(2064 * 0.86),
-    framePath: null,
   },
 };
 
@@ -320,7 +320,6 @@ async function main() {
       : options.device;
   const profile = profiles[profileName];
   const screenshotDataUrl = await fileToDataUrl(options.screenshotPath);
-  const frameDataUrl = profile.framePath ? await fileToDataUrl(profile.framePath) : null;
   const typographyKey =
     options.locale === "auto"
       ? detectScript(`${options.verb} ${options.desc}`)
@@ -334,7 +333,6 @@ async function main() {
     profile,
     typography,
     screenshotDataUrl,
-    frameDataUrl,
   };
 
   const html = await buildHtml(renderConfig);

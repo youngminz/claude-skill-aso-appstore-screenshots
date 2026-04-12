@@ -108,18 +108,52 @@
         width: var(--device-width);
         height: var(--device-height);
         transform: translateX(-50%);
+        border-radius: var(--device-radius);
+      }
+
+      .device-shell.iphone {
+        background: linear-gradient(180deg, rgb(36 36 40), rgb(14 14 17));
+        box-shadow:
+          inset 0 0 0 2px rgb(48 48 52),
+          inset 0 0 0 12px rgb(8 8 10);
       }
 
       .device-shell.ipad {
-        border-radius: var(--device-radius);
         background: rgb(34 34 36);
         box-shadow: inset 0 0 0 2px rgb(18 18 20);
       }
 
+      .device-shell.iphone::before,
+      .device-shell.iphone::after,
       .device-shell.ipad::before,
       .device-shell.ipad::after {
         content: "";
         position: absolute;
+      }
+
+      .device-shell.iphone::before {
+        top: 42px;
+        left: 50%;
+        width: 320px;
+        height: 96px;
+        transform: translateX(-50%);
+        background: rgb(6 6 8);
+        border-radius: 999px;
+        box-shadow:
+          inset 0 -1px 0 rgb(255 255 255 / 0.05),
+          0 1px 0 rgb(255 255 255 / 0.02);
+        z-index: 2;
+      }
+
+      .device-shell.iphone::after {
+        inset: 8px;
+        border-radius: calc(var(--device-radius) - 8px);
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+        pointer-events: none;
+      }
+
+      .device-shell.ipad::before,
+      .device-shell.ipad::after {
         background: rgb(22 22 24);
         border-radius: 3px;
       }
@@ -144,25 +178,20 @@
         top: var(--bezel);
         left: var(--bezel);
         width: calc(var(--device-width) - (var(--bezel) * 2));
-        height: calc(var(--canvas-height) - (var(--device-y) + var(--bezel)) + 500px);
+        height: calc(var(--device-height) - (var(--bezel) * 2));
         overflow: hidden;
         border-radius: var(--screen-radius);
         background: #000000;
+      }
+
+      .device-shell.iphone .screen {
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.05);
       }
 
       .screen img {
         display: block;
         width: 100%;
         height: auto;
-      }
-
-      .frame-image {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        pointer-events: none;
       }
 
     </style>
@@ -177,7 +206,6 @@
         <div class="screen" id="screen">
           <img id="screenshot-image" alt="" />
         </div>
-        <img class="frame-image" id="frame-image" alt="" />
       </section>
     </main>
     <script>
@@ -191,7 +219,6 @@
       const subtitle = document.getElementById("subtitle");
       const deviceShell = document.getElementById("device-shell");
       const screenshotImage = document.getElementById("screenshot-image");
-      const frameImage = document.getElementById("frame-image");
 
       const canvasContext = document.createElement("canvas").getContext("2d");
 
@@ -239,6 +266,14 @@
       }
 
       function wrapText(text, fontSize, maxWidth, wrapMode = "word") {
+        if (text.includes("\n")) {
+          return text
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .flatMap((line) => wrapText(line, fontSize, maxWidth, wrapMode === "cjk" ? "cjk" : "word"));
+        }
+
         const segments =
           wrapMode === "cjk"
             ? splitGraphemes(text)
@@ -376,23 +411,12 @@
         copy.dir = config.typography.direction;
         title.lang = config.typography.lang;
         subtitle.lang = config.typography.lang;
+        deviceShell.className = `device-shell ${config.profile.shellStyle}`;
         screenshotImage.src = config.screenshotDataUrl;
-
-        if (config.frameDataUrl) {
-          frameImage.hidden = false;
-          frameImage.src = config.frameDataUrl;
-          deviceShell.classList.remove("ipad");
-        } else {
-          frameImage.hidden = true;
-          deviceShell.classList.add("ipad");
-        }
 
         await ensureTypographyLoaded(profile);
         layoutCopy(profile);
         await waitForImage(screenshotImage);
-        if (config.frameDataUrl) {
-          await waitForImage(frameImage);
-        }
 
         document.body.dataset.renderReady = "true";
       }

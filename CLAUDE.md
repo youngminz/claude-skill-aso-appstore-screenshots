@@ -11,10 +11,10 @@ A Claude Code skill (`aso-appstore-screenshots`) that guides users through creat
 Four files + one asset make up the skill:
 
 - **SKILL.md** — The skill prompt. Defines a multi-phase workflow: Benefit Discovery → Screenshot Pairing → Generation. Uses Claude Code's memory system to persist state across conversations so users can resume mid-workflow. Generation first creates a deterministic scaffold via `compose.mjs`, then sends it to Nano Banana Pro for AI enhancement.
-- **compose.mjs** — The primary screenshot renderer. It uses Playwright + HTML/CSS to deterministically render App Store screenshot scaffolds from a background hex colour, action verb, benefit descriptor, locale, and simulator screenshot path.
-- **generate_frame.py** — Generates the device frame template PNG (`assets/device_frame.png`). Run once to create or update the template. The template is a 1290×2796 RGBA PNG with a black iPhone body, transparent screen cutout, Dynamic Island, and side buttons.
+- **compose.mjs** — The primary screenshot renderer. It uses Playwright + HTML/CSS to deterministically render App Store screenshot scaffolds from a background hex colour, action verb, benefit descriptor, locale, and simulator screenshot path. The device shell is rendered directly in HTML/CSS.
+- **generate_frame.py** — Legacy utility that generates a standalone device frame PNG (`assets/device_frame.png`) kept as a reference asset.
 - **showcase.py** — Generates a showcase image showing up to 3 final screenshots side-by-side with an optional GitHub link at the bottom. Used as the final step after all screenshots are approved.
-- **assets/device_frame.png** — Pre-rendered iPhone device frame template used by `compose.mjs`. Using a template instead of drawing the frame at compose time ensures pixel-perfect consistency across all generated screenshots.
+- **assets/device_frame.png** — Legacy reference frame asset retained for compatibility. It is no longer used by `compose.mjs`.
 
 ## Running compose.mjs
 
@@ -36,9 +36,9 @@ node compose.mjs \
 
 ## Key Design Decisions
 
-- **Two-stage generation**: `compose.mjs` creates a deterministic scaffold first (text + frame + screenshot), then Nano Banana Pro enhances it. This avoids the inconsistencies of generating from scratch.
+- **Two-stage generation**: `compose.mjs` creates a deterministic scaffold first (text + CSS device shell + screenshot), then Nano Banana Pro enhances it. This avoids the inconsistencies of generating from scratch.
 - **compose.mjs outputs exact App Store Connect dimensions** (1290×2796 for iPhone 6.7") — no post-processing crop needed.
-- **Device frame is a template image** (`assets/device_frame.png`) — not drawn at compose time. Regenerate with `python3 generate_frame.py` if the frame design needs updating.
+- **Device shell is CSS-rendered** — iPhone and iPad hardware outlines are drawn directly in `web/renderer.html`, so the scaffold no longer depends on a frame overlay image.
 - **Verb text auto-sizes** — shrinks from 172px down to 100px to fit multi-word verbs (e.g. "TURN YOURSELF") within the canvas width.
 - **Typography is locale-aware** — English uses SF Pro Display Black, Korean uses Pretendard, Japanese uses Hiragino Sans, Simplified Chinese uses PingFang SC, Traditional Chinese uses PingFang TC, and Arabic uses SF Arabic.
 - **CJK subtitle layout is character-based** — Japanese and Chinese do not rely on whitespace wrapping, and subtitles can shrink slightly when 2 lines are still too wide.

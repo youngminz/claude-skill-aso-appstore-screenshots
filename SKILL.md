@@ -322,7 +322,7 @@ Use `--locale zh-Hans` or `--locale zh-Hant` explicitly for Chinese copy. Han-on
 
 This outputs pixel-perfect 1290×2796 PNGs with:
 - Bold white headline text (verb auto-sized to fit canvas width)
-- iPhone device frame (from pre-rendered template)
+- CSS-rendered iPhone or iPad device shell
 - Simulator screenshot composited inside the frame
 - Solid background colour
 

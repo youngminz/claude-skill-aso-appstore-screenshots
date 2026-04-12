@@ -95,7 +95,7 @@ The skill will guide you through each phase interactively. Progress is saved to 
 
 Rather than generating screenshots from scratch (which produces inconsistent results), the skill uses a two-stage approach:
 
-1. **compose.mjs** creates the current deterministic scaffold with exact text positioning, device frame, and your simulator screenshot composited inside
+1. **compose.mjs** creates the current deterministic scaffold with exact text positioning, a CSS-rendered device shell, and your simulator screenshot composited inside
 2. **Nano Banana Pro** (via Gemini MCP) enhances the scaffold — adding a photorealistic device frame, breakout elements, and visual polish
 
 This ensures consistent layout across all screenshots while letting AI handle the creative enhancement.
@@ -124,9 +124,9 @@ The `final/` folder contains App Store-ready screenshots at exact Apple dimensio
 |------|---------|
 | `SKILL.md` | The skill prompt — defines the multi-phase workflow |
 | `compose.mjs` + `web/renderer.html` | Deterministic scaffold renderer powered by Playwright + HTML/CSS |
-| `generate_frame.py` | Generates the device frame template |
+| `generate_frame.py` | Legacy utility for generating a standalone reference frame image |
 | `showcase.py` | Generates the side-by-side showcase image |
-| `assets/device_frame.png` | Pre-rendered iPhone device frame template |
+| `assets/device_frame.png` | Legacy reference frame asset kept for compatibility |
 
 ## Locale-Aware Typography
 
