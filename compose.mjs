@@ -57,6 +57,9 @@ const localeTypographyMap = {
   ko: "korean",
   ja: "japanese",
   ar: "arabic",
+  he: "hebrew",
+  hi: "hindi",
+  th: "thai",
   "zh-Hans": "simplifiedChinese",
   "zh-Hant": "traditionalChinese",
 };
@@ -131,6 +134,36 @@ const typographyProfiles = {
     lineHeightRatio: 1,
     subtitleGapOffset: 56,
   },
+  hebrew: {
+    fontFamily: '"SF Hebrew", "Arial Hebrew", sans-serif',
+    fontLoadFamily: '"SF Hebrew"',
+    fontWeight: 700,
+    direction: "rtl",
+    lang: "he",
+    textTransform: "none",
+    lineHeightRatio: 1,
+    subtitleGapOffset: 56,
+  },
+  hindi: {
+    fontFamily: '"Kohinoor Devanagari", ".SF Devanagari", "Arial Unicode MS", sans-serif',
+    fontLoadFamily: '"Kohinoor Devanagari"',
+    fontWeight: 700,
+    direction: "ltr",
+    lang: "hi",
+    textTransform: "none",
+    lineHeightRatio: 1,
+    subtitleGapOffset: 56,
+  },
+  thai: {
+    fontFamily: '"Sukhumvit Set", "Thonburi", "Arial Unicode MS", sans-serif',
+    fontLoadFamily: '"Sukhumvit Set"',
+    fontWeight: 700,
+    direction: "ltr",
+    lang: "th",
+    textTransform: "none",
+    lineHeightRatio: 1,
+    subtitleGapOffset: 56,
+  },
 };
 
 const bundledFontCandidates = {
@@ -160,6 +193,15 @@ const bundledFontCandidates = {
       path: "/System/Library/Fonts/SFArabic.ttf",
     },
   ],
+  hebrew: [
+    {
+      family: "SF Hebrew",
+      fontWeight: "700",
+      path: "/System/Library/Fonts/SFHebrew.ttf",
+    },
+  ],
+  hindi: [],
+  thai: [],
 };
 
 function usage() {
@@ -172,7 +214,7 @@ function usage() {
     "    --screenshot '/path/to/screenshot.png' \\",
     "    --output '/path/to/output.png' \\",
     "    [--device auto|iphone-67|ipad-13] \\",
-    "    [--locale auto|en|ko|ja|zh-Hans|zh-Hant|ar]",
+    "    [--locale auto|en|ko|ja|ar|he|hi|th|zh-Hans|zh-Hant]",
   ].join("\n");
 }
 
@@ -308,6 +350,15 @@ function detectScript(text) {
   }
   if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/u.test(text)) {
     return "arabic";
+  }
+  if (/[\u0590-\u05FF]/u.test(text)) {
+    return "hebrew";
+  }
+  if (/[\u0900-\u097F]/u.test(text)) {
+    return "hindi";
+  }
+  if (/[\u0E00-\u0E7F]/u.test(text)) {
+    return "thai";
   }
   return "latin";
 }
