@@ -7,12 +7,7 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <style>
-      @font-face {
-        font-family: "SF Pro Display Black";
-        src: url("__FONT_DATA_URL_TOKEN__") format("opentype");
-        font-weight: 900;
-        font-style: normal;
-      }
+      __FONT_FACE_CSS__
 
       :root {
         color-scheme: light;
@@ -35,6 +30,10 @@
         --max-verb-width: 1186px;
         --line-height-ratio: 0.733;
         --copy-block-gap: 28px;
+        --copy-font-family: "SF Pro Display Black", sans-serif;
+        --copy-font-weight: 900;
+        --copy-text-transform: uppercase;
+        --copy-direction: ltr;
       }
 
       * {
@@ -49,7 +48,7 @@
       }
 
       body {
-        font-family: "SF Pro Display Black", sans-serif;
+        font-family: var(--copy-font-family);
       }
 
       .canvas {
@@ -69,7 +68,11 @@
         width: 100%;
         transform: translateX(-50%);
         text-align: center;
-        text-transform: uppercase;
+        text-transform: var(--copy-text-transform);
+        font-family: var(--copy-font-family);
+        font-weight: var(--copy-font-weight);
+        direction: var(--copy-direction);
+        unicode-bidi: plaintext;
       }
 
       .title,
@@ -183,6 +186,7 @@
     <script type="module">
       const config = window.__RENDER_CONFIG__;
       const root = document.documentElement;
+      const copy = document.querySelector(".copy");
       const title = document.getElementById("title");
       const subtitle = document.getElementById("subtitle");
       const deviceShell = document.getElementById("device-shell");
@@ -196,8 +200,32 @@
       }
 
       function measureWidth(text, fontSize) {
-        canvasContext.font = `900 ${fontSize}px "SF Pro Display Black"`;
+        const fontWeight = config.typography.fontWeight;
+        const fontFamily = config.typography.fontFamily;
+        canvasContext.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
         return canvasContext.measureText(text).width;
+      }
+
+      async function ensureTypographyLoaded(profile) {
+        if (!document.fonts) {
+          return;
+        }
+
+        const fontSizes = [profile.verbSizeMax, profile.descSize];
+        await Promise.all(
+          fontSizes.map((fontSize) =>
+            document.fonts.load(
+              `${config.typography.fontWeight} ${fontSize}px ${config.typography.fontLoadFamily}`,
+            ),
+          ),
+        );
+      }
+
+      function transformText(value) {
+        if (config.typography.textTransform === "uppercase") {
+          return value.toUpperCase();
+        }
+        return value;
       }
 
       function wrapWords(text, fontSize, maxWidth) {
@@ -261,13 +289,21 @@
         root.style.setProperty("--desc-line-gap", px(profile.descLineGap));
         root.style.setProperty("--max-text-width", px(profile.maxTextWidth));
         root.style.setProperty("--max-verb-width", px(profile.maxVerbWidth));
-        root.style.setProperty("--copy-block-gap", px(profile.verbDescGap + 8));
+        root.style.setProperty(
+          "--copy-block-gap",
+          px(profile.verbDescGap + config.typography.subtitleGapOffset),
+        );
+        root.style.setProperty("--line-height-ratio", String(config.typography.lineHeightRatio));
+        root.style.setProperty("--copy-font-family", config.typography.fontFamily);
+        root.style.setProperty("--copy-font-weight", String(config.typography.fontWeight));
+        root.style.setProperty("--copy-text-transform", config.typography.textTransform);
+        root.style.setProperty("--copy-direction", config.typography.direction);
       }
 
       function layoutCopy(profile) {
-        const titleText = config.verb.toUpperCase();
-        const subtitleText = config.desc.toUpperCase();
-        const copyBlockGap = profile.verbDescGap + 60;
+        const titleText = transformText(config.verb);
+        const subtitleText = transformText(config.desc);
+        const copyBlockGap = profile.verbDescGap + config.typography.subtitleGapOffset;
         const titleSize = fitTitle(titleText, profile);
         const titleLines = [titleText];
         const subtitleLines = wrapWords(subtitleText, profile.descSize, profile.maxTextWidth);
@@ -298,6 +334,10 @@
       async function render() {
         const profile = config.profile;
         applyProfile(profile);
+        document.documentElement.lang = config.typography.lang;
+        copy.dir = config.typography.direction;
+        title.lang = config.typography.lang;
+        subtitle.lang = config.typography.lang;
         screenshotImage.src = config.screenshotDataUrl;
 
         if (config.frameDataUrl) {
@@ -309,6 +349,7 @@
           deviceShell.classList.add("ipad");
         }
 
+        await ensureTypographyLoaded(profile);
         layoutCopy(profile);
         await waitForImage(screenshotImage);
         if (config.frameDataUrl) {

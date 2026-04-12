@@ -9,7 +9,7 @@ import { chromium } from "playwright";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = __dirname;
-const fontPath = "/Library/Fonts/SF-Pro-Display-Black.otf";
+const homeDir = process.env.HOME ?? "";
 
 const profiles = {
   "iphone-67": {
@@ -50,6 +50,68 @@ const profiles = {
     maxVerbWidth: Math.floor(2064 * 0.86),
     framePath: null,
   },
+};
+
+const typographyProfiles = {
+  latin: {
+    fontFamily: '"SF Pro Display Black", sans-serif',
+    fontLoadFamily: '"SF Pro Display Black"',
+    fontWeight: 900,
+    direction: "ltr",
+    lang: "en",
+    textTransform: "uppercase",
+    lineHeightRatio: 0.733,
+    subtitleGapOffset: 60,
+  },
+  korean: {
+    fontFamily: '"Pretendard", "Apple SD Gothic Neo", "AppleGothic", sans-serif',
+    fontLoadFamily: '"Pretendard"',
+    fontWeight: 800,
+    direction: "ltr",
+    lang: "ko",
+    textTransform: "none",
+    lineHeightRatio: 0.9,
+    subtitleGapOffset: 52,
+  },
+  arabic: {
+    fontFamily: '"SF Arabic", "Geeza Pro", "Baghdad", "Damascus", sans-serif',
+    fontLoadFamily: '"SF Arabic"',
+    fontWeight: 700,
+    direction: "rtl",
+    lang: "ar",
+    textTransform: "none",
+    lineHeightRatio: 1,
+    subtitleGapOffset: 56,
+  },
+};
+
+const bundledFontCandidates = {
+  latin: [
+    {
+      family: "SF Pro Display Black",
+      fontWeight: "900",
+      path: "/Library/Fonts/SF-Pro-Display-Black.otf",
+    },
+  ],
+  korean: [
+    {
+      family: "Pretendard",
+      fontWeight: "45 920",
+      path: path.join(homeDir, "Library", "Fonts", "PretendardVariable.ttf"),
+    },
+    {
+      family: "Pretendard",
+      fontWeight: "800",
+      path: path.join(homeDir, "Library", "Fonts", "Pretendard-ExtraBold.otf"),
+    },
+  ],
+  arabic: [
+    {
+      family: "SF Arabic",
+      fontWeight: "700",
+      path: "/System/Library/Fonts/SFArabic.ttf",
+    },
+  ],
 };
 
 function usage() {
@@ -128,14 +190,65 @@ async function inferProfileName(screenshotPath) {
   return "iphone-67";
 }
 
+async function resolveFirstExistingFont(candidates) {
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate.path);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function fontFormat(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return {
+    ".otf": "opentype",
+    ".ttf": "truetype",
+  }[ext];
+}
+
+async function buildFontFaceCss() {
+  const fontFaceBlocks = [];
+
+  for (const candidates of Object.values(bundledFontCandidates)) {
+    const font = await resolveFirstExistingFont(candidates);
+    if (!font) {
+      continue;
+    }
+
+    const dataUrl = await fileToDataUrl(font.path);
+    fontFaceBlocks.push(`@font-face {
+        font-family: "${font.family}";
+        src: url("${dataUrl}") format("${fontFormat(font.path)}");
+        font-weight: ${font.fontWeight};
+        font-style: normal;
+      }`);
+  }
+
+  return fontFaceBlocks.join("\n\n");
+}
+
 async function buildHtml(config) {
   const templatePath = path.join(rootDir, "web", "renderer.html");
   const template = await fs.readFile(templatePath, "utf8");
-  const fontDataUrl = await fileToDataUrl(fontPath);
+  const fontFaceCss = await buildFontFaceCss();
 
   return template
-    .replace("__FONT_DATA_URL_TOKEN__", fontDataUrl)
+    .replace("__FONT_FACE_CSS__", fontFaceCss)
     .replace("__RENDER_CONFIG_JSON__", JSON.stringify(config));
+}
+
+function detectScript(text) {
+  if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/u.test(text)) {
+    return "korean";
+  }
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/u.test(text)) {
+    return "arabic";
+  }
+  return "latin";
 }
 
 async function main() {
@@ -147,12 +260,15 @@ async function main() {
   const profile = profiles[profileName];
   const screenshotDataUrl = await fileToDataUrl(options.screenshotPath);
   const frameDataUrl = profile.framePath ? await fileToDataUrl(profile.framePath) : null;
+  const script = detectScript(`${options.verb} ${options.desc}`);
+  const typography = typographyProfiles[script];
 
   const renderConfig = {
     background: options.background,
     verb: options.verb,
     desc: options.desc,
     profile,
+    typography,
     screenshotDataUrl,
     frameDataUrl,
   };
