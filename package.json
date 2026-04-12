@@ -1,0 +1,12 @@
+{
+  "name": "aso-appstore-screenshots",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compose": "node compose.mjs"
+  },
+  "dependencies": {
+    "image-size": "^2.0.2",
+    "playwright": "^1.59.1"
+  }
+}

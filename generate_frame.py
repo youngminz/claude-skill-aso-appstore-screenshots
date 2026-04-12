@@ -2,7 +2,7 @@
 """
 Generate iPhone device frame template PNG.
 Output: assets/device_frame.png — standalone device image (not positioned on canvas).
-compose.py positions this dynamically based on text height.
+compose.mjs positions this dynamically based on text height.
 """
 
 from PIL import Image, ImageDraw, ImageChops

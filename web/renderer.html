@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <style>
+      @font-face {
+        font-family: "SF Pro Display Black";
+        src: url("__FONT_DATA_URL_TOKEN__") format("opentype");
+        font-weight: 900;
+        font-style: normal;
+      }
+
+      :root {
+        color-scheme: light;
+        --canvas-width: 1290px;
+        --canvas-height: 2796px;
+        --background: #0f172a;
+        --device-width: 1030px;
+        --device-height: 2800px;
+        --device-y: 720px;
+        --bezel: 15px;
+        --screen-radius: 62px;
+        --device-radius: 77px;
+        --text-top: 200px;
+        --verb-size-max: 256px;
+        --verb-size-min: 150px;
+        --desc-size: 124px;
+        --verb-desc-gap: 20px;
+        --desc-line-gap: 24px;
+        --max-text-width: 1186px;
+        --max-verb-width: 1186px;
+        --line-height-ratio: 0.733;
+        --copy-block-gap: 28px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+      }
+
+      body {
+        font-family: "SF Pro Display Black", sans-serif;
+      }
+
+      .canvas {
+        position: relative;
+        width: var(--canvas-width);
+        height: var(--canvas-height);
+        overflow: hidden;
+        background: var(--background);
+        color: #ffffff;
+        isolation: isolate;
+      }
+
+      .copy {
+        position: absolute;
+        top: var(--text-top);
+        left: 50%;
+        width: 100%;
+        transform: translateX(-50%);
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .title,
+      .subtitle {
+        margin: 0 auto;
+        display: grid;
+        justify-items: center;
+      }
+
+      .title {
+        width: var(--max-verb-width);
+      }
+
+      .subtitle {
+        width: var(--max-text-width);
+        margin-top: var(--copy-block-gap);
+      }
+
+      .line {
+        display: block;
+        white-space: nowrap;
+        line-height: var(--line-height-ratio);
+      }
+
+      .line + .line {
+        margin-top: var(--desc-line-gap);
+      }
+
+      .device-shell {
+        position: absolute;
+        left: 50%;
+        top: var(--device-y);
+        width: var(--device-width);
+        height: var(--device-height);
+        transform: translateX(-50%);
+      }
+
+      .device-shell.ipad {
+        border-radius: var(--device-radius);
+        background: rgb(34 34 36);
+        box-shadow: inset 0 0 0 2px rgb(18 18 20);
+      }
+
+      .device-shell.ipad::before,
+      .device-shell.ipad::after {
+        content: "";
+        position: absolute;
+        background: rgb(22 22 24);
+        border-radius: 3px;
+      }
+
+      .device-shell.ipad::before {
+        top: 420px;
+        right: -5px;
+        width: 5px;
+        height: 200px;
+      }
+
+      .device-shell.ipad::after {
+        top: 360px;
+        left: -5px;
+        width: 5px;
+        height: 320px;
+        box-shadow: 0 180px 0 0 rgb(22 22 24);
+      }
+
+      .screen {
+        position: absolute;
+        top: var(--bezel);
+        left: var(--bezel);
+        width: calc(var(--device-width) - (var(--bezel) * 2));
+        height: calc(var(--canvas-height) - (var(--device-y) + var(--bezel)) + 500px);
+        overflow: hidden;
+        border-radius: var(--screen-radius);
+        background: #000000;
+      }
+
+      .screen img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .frame-image {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+      }
+
+    </style>
+  </head>
+  <body>
+    <main class="canvas" id="canvas">
+      <section class="copy">
+        <div class="title" id="title"></div>
+        <div class="subtitle" id="subtitle"></div>
+      </section>
+      <section class="device-shell" id="device-shell">
+        <div class="screen" id="screen">
+          <img id="screenshot-image" alt="" />
+        </div>
+        <img class="frame-image" id="frame-image" alt="" />
+      </section>
+    </main>
+    <script>
+      window.__RENDER_CONFIG__ = __RENDER_CONFIG_JSON__;
+    </script>
+    <script type="module">
+      const config = window.__RENDER_CONFIG__;
+      const root = document.documentElement;
+      const title = document.getElementById("title");
+      const subtitle = document.getElementById("subtitle");
+      const deviceShell = document.getElementById("device-shell");
+      const screenshotImage = document.getElementById("screenshot-image");
+      const frameImage = document.getElementById("frame-image");
+
+      const canvasContext = document.createElement("canvas").getContext("2d");
+
+      function px(value) {
+        return `${value}px`;
+      }
+
+      function measureWidth(text, fontSize) {
+        canvasContext.font = `900 ${fontSize}px "SF Pro Display Black"`;
+        return canvasContext.measureText(text).width;
+      }
+
+      function wrapWords(text, fontSize, maxWidth) {
+        const words = text.trim().split(/\s+/).filter(Boolean);
+        if (words.length === 0) return [text];
+
+        const lines = [];
+        let current = "";
+
+        for (const word of words) {
+          const candidate = current ? `${current} ${word}` : word;
+          if (measureWidth(candidate, fontSize) <= maxWidth) {
+            current = candidate;
+          } else {
+            if (current) lines.push(current);
+            current = word;
+          }
+        }
+
+        if (current) lines.push(current);
+        return lines;
+      }
+
+      function renderLines(container, lines, fontSize) {
+        container.innerHTML = "";
+        container.style.fontSize = px(fontSize);
+        for (const lineText of lines) {
+          const line = document.createElement("span");
+          line.className = "line";
+          line.textContent = lineText;
+          container.appendChild(line);
+        }
+      }
+
+      function fitTitle(text, profile) {
+        let size = profile.verbSizeMax;
+        while (size >= profile.verbSizeMin) {
+          if (measureWidth(text, size) <= profile.maxVerbWidth) {
+            return size;
+          }
+          size -= 4;
+        }
+        return profile.verbSizeMin;
+      }
+
+      function applyProfile(profile) {
+        root.style.setProperty("--canvas-width", px(profile.canvasWidth));
+        root.style.setProperty("--canvas-height", px(profile.canvasHeight));
+        root.style.setProperty("--background", config.background);
+        root.style.setProperty("--device-width", px(profile.deviceWidth));
+        root.style.setProperty("--device-height", px(profile.deviceHeight));
+        root.style.setProperty("--device-y", px(profile.deviceY));
+        root.style.setProperty("--bezel", px(profile.bezel));
+        root.style.setProperty("--screen-radius", px(profile.screenCornerRadius));
+        root.style.setProperty("--device-radius", px(profile.deviceCornerRadius));
+        root.style.setProperty("--text-top", px(profile.textTop));
+        root.style.setProperty("--verb-size-max", px(profile.verbSizeMax));
+        root.style.setProperty("--verb-size-min", px(profile.verbSizeMin));
+        root.style.setProperty("--desc-size", px(profile.descSize));
+        root.style.setProperty("--verb-desc-gap", px(profile.verbDescGap));
+        root.style.setProperty("--desc-line-gap", px(profile.descLineGap));
+        root.style.setProperty("--max-text-width", px(profile.maxTextWidth));
+        root.style.setProperty("--max-verb-width", px(profile.maxVerbWidth));
+        root.style.setProperty("--copy-block-gap", px(profile.verbDescGap + 8));
+      }
+
+      function layoutCopy(profile) {
+        const titleText = config.verb.toUpperCase();
+        const subtitleText = config.desc.toUpperCase();
+        const copyBlockGap = profile.verbDescGap + 60;
+        const titleSize = fitTitle(titleText, profile);
+        const titleLines = [titleText];
+        const subtitleLines = wrapWords(subtitleText, profile.descSize, profile.maxTextWidth);
+
+        renderLines(title, titleLines, titleSize);
+        renderLines(subtitle, subtitleLines, profile.descSize);
+
+        title.style.marginTop = "0";
+        subtitle.style.marginTop = px(copyBlockGap);
+
+        const copyHeight = Math.ceil(
+          title.getBoundingClientRect().height +
+            subtitle.getBoundingClientRect().height +
+            copyBlockGap,
+        );
+        const centeredTop = Math.round((profile.deviceY - copyHeight) / 2);
+        root.style.setProperty("--text-top", px(centeredTop));
+      }
+
+      async function waitForImage(imageElement) {
+        if (imageElement.complete) return;
+        await new Promise((resolve, reject) => {
+          imageElement.addEventListener("load", resolve, { once: true });
+          imageElement.addEventListener("error", reject, { once: true });
+        });
+      }
+
+      async function render() {
+        const profile = config.profile;
+        applyProfile(profile);
+        screenshotImage.src = config.screenshotDataUrl;
+
+        if (config.frameDataUrl) {
+          frameImage.hidden = false;
+          frameImage.src = config.frameDataUrl;
+          deviceShell.classList.remove("ipad");
+        } else {
+          frameImage.hidden = true;
+          deviceShell.classList.add("ipad");
+        }
+
+        layoutCopy(profile);
+        await waitForImage(screenshotImage);
+        if (config.frameDataUrl) {
+          await waitForImage(frameImage);
+        }
+
+        document.body.dataset.renderReady = "true";
+      }
+
+      render().catch((error) => {
+        document.body.dataset.renderError = String(error?.message ?? error);
+      });
+    </script>
+  </body>
+</html>
