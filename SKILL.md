@@ -248,11 +248,13 @@ Default to **1290 x 2796px** (iPhone 6.7") unless the user specifies otherwise. 
 Each screenshot follows this exact high-converting ASO format. **Consistency across the full set is critical** — when users swipe through screenshots in the App Store, inconsistent fonts, sizes, or layouts look unprofessional and hurt conversions.
 
 **Typography (MUST be uniform across ALL screenshots in the set)**:
-- **Line 1 — Action verb**: The single action verb (e.g., "TRACK", "SEARCH", "BOOST"). This is the BIGGEST, boldest text on the screenshot. White, uppercase, center-aligned. Same font, same size, same weight on every screenshot.
-- **Line 2 — Benefit descriptor**: The rest of the headline (e.g., "TRADING CARD PRICES", "ANY VERSE IN SECONDS"). Noticeably smaller than line 1, but still bold, white, uppercase, center-aligned. Same font, same size, same weight on every screenshot.
-- **Font**: Heavy/black weight sans-serif (e.g., SF Pro Display Black, Inter Black, or similar high-impact font). Not just bold — heavy/black weight for maximum impact.
+- **Line 1 — Action verb**: The single action verb (e.g., "TRACK", "SEARCH", "BOOST"). This is the BIGGEST, boldest text on the screenshot. White and center-aligned. For Latin languages it should be uppercase. For Korean, Japanese, Chinese, and Arabic, preserve the native script with no forced uppercase.
+- **Line 2 — Benefit descriptor**: The rest of the headline (e.g., "TRADING CARD PRICES", "ANY VERSE IN SECONDS"). Noticeably smaller than line 1, but still bold, white, and center-aligned. For Latin languages it should be uppercase. For Korean, Japanese, Chinese, and Arabic, preserve the native script with no forced uppercase.
+- **Font**: Use a locale-appropriate heavy sans-serif rather than forcing one font across every script. Default mapping for deterministic scaffolds is: English/Latin → SF Pro Display Black, Korean → Pretendard, Japanese → Hiragino Sans, Simplified Chinese → PingFang SC, Traditional Chinese → PingFang TC, Arabic → SF Arabic.
 - **Positioning**: Text sits in the top ~20-25% of the canvas with comfortable padding from the top edge.
 - **Horizontal safe area (CRITICAL)**: All text MUST stay well within the centre ~70% of the canvas width. Leave generous horizontal margins on both sides — at least 15% padding from each edge. This is essential because the post-processing step crops the sides of the image to convert from 9:16 to Apple's narrower aspect ratio. Any text near the left or right edges WILL be cut off. Keep headlines short enough to fit comfortably within this safe zone. If a headline is too long, break it across more lines rather than extending to the edges.
+- **Non-Latin wrapping**: Korean, Japanese, and Chinese should be treated as CJK text, which means character-based wrapping is acceptable. If a Japanese or Chinese subtitle is still too wide after wrapping to two lines, slightly reduce the subtitle font size rather than letting it clip.
+- **RTL languages**: Arabic should stay right-to-left and use SF Arabic. Do not flip it into LTR order, and do not uppercase embedded Arabic text.
 
 **Device frame**:
 - A modern iPhone device mockup (black frame, dynamic island)
@@ -302,16 +304,21 @@ npx --prefix "$SKILL_DIR" playwright install chromium && \
 node "$SKILL_DIR/compose.mjs" \
   --bg "[HEX CODE]" --verb "[VERB 1]" --desc "[DESC 1]" \
   --screenshot [path/to/screenshot-1.png] \
-  --output screenshots/01-[benefit-slug]/scaffold.png && \
+  --output screenshots/01-[benefit-slug]/scaffold.png \
+  --locale [auto|en|ko|ja|zh-Hans|zh-Hant|ar] && \
 node "$SKILL_DIR/compose.mjs" \
   --bg "[HEX CODE]" --verb "[VERB 2]" --desc "[DESC 2]" \
   --screenshot [path/to/screenshot-2.png] \
-  --output screenshots/02-[benefit-slug]/scaffold.png && \
+  --output screenshots/02-[benefit-slug]/scaffold.png \
+  --locale [auto|en|ko|ja|zh-Hans|zh-Hant|ar] && \
 node "$SKILL_DIR/compose.mjs" \
   --bg "[HEX CODE]" --verb "[VERB 3]" --desc "[DESC 3]" \
   --screenshot [path/to/screenshot-3.png] \
-  --output screenshots/03-[benefit-slug]/scaffold.png
+  --output screenshots/03-[benefit-slug]/scaffold.png \
+  --locale [auto|en|ko|ja|zh-Hans|zh-Hant|ar]
 ```
+
+Use `--locale zh-Hans` or `--locale zh-Hant` explicitly for Chinese copy. Han-only text is ambiguous, so auto-detection is not reliable enough there.
 
 This outputs pixel-perfect 1290×2796 PNGs with:
 - Bold white headline text (verb auto-sized to fit canvas width)

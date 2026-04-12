@@ -40,16 +40,34 @@ npm run compose -- \
   --verb 'Track' \
   --desc 'Trading Card Prices' \
   --screenshot /path/to/screenshot.png \
-  --output /path/to/output.png
+  --output /path/to/output.png \
+  --locale auto
 ```
 
 ### 4. Font requirement
 
-The skill uses **SF Pro Display Black** for headline text. On macOS, install it from [Apple's developer fonts](https://developer.apple.com/fonts/). The expected path is:
+The renderer is locale-aware and chooses different headline fonts depending on the script:
+
+- English and Latin: **SF Pro Display Black**
+- Korean: **Pretendard**
+- Japanese: **Hiragino Sans**
+- Simplified Chinese: **PingFang SC**
+- Traditional Chinese: **PingFang TC**
+- Arabic: **SF Arabic**
+
+On macOS, install **SF Pro Display Black** from [Apple's developer fonts](https://developer.apple.com/fonts/). The expected path is:
 
 ```
 /Library/Fonts/SF-Pro-Display-Black.otf
 ```
+
+For Korean, `compose.mjs` looks for `PretendardVariable.ttf` or `Pretendard-ExtraBold.otf` in:
+
+```
+~/Library/Fonts/
+```
+
+Japanese, Chinese, and Arabic rely on built-in macOS system fonts.
 
 ### 5. Set up Gemini MCP (for AI enhancement)
 
@@ -109,6 +127,19 @@ The `final/` folder contains App Store-ready screenshots at exact Apple dimensio
 | `generate_frame.py` | Generates the device frame template |
 | `showcase.py` | Generates the side-by-side showcase image |
 | `assets/device_frame.png` | Pre-rendered iPhone device frame template |
+
+## Locale-Aware Typography
+
+`compose.mjs` supports explicit locale overrides:
+
+```bash
+--locale auto|en|ko|ja|zh-Hans|zh-Hant|ar
+```
+
+- `auto` is fine for English, Korean, Japanese, and Arabic.
+- For Chinese, prefer explicit locale selection because Han-only copy cannot be reliably inferred as simplified vs traditional.
+- CJK subtitles wrap by character, not by spaces.
+- Japanese and Chinese subtitles can shrink slightly if two lines are still too wide.
 
 ## License
 

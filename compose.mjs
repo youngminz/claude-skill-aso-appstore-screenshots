@@ -52,6 +52,15 @@ const profiles = {
   },
 };
 
+const localeTypographyMap = {
+  en: "latin",
+  ko: "korean",
+  ja: "japanese",
+  ar: "arabic",
+  "zh-Hans": "simplifiedChinese",
+  "zh-Hant": "traditionalChinese",
+};
+
 const typographyProfiles = {
   latin: {
     fontFamily: '"SF Pro Display Black", sans-serif',
@@ -71,6 +80,45 @@ const typographyProfiles = {
     lang: "ko",
     textTransform: "none",
     lineHeightRatio: 0.9,
+    subtitleGapOffset: 52,
+  },
+  japanese: {
+    fontFamily: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif',
+    fontLoadFamily: '"Hiragino Sans"',
+    fontWeight: 700,
+    direction: "ltr",
+    lang: "ja",
+    textTransform: "none",
+    wrapMode: "cjk",
+    maxSubtitleLines: 2,
+    descSizeMinScale: 0.7,
+    lineHeightRatio: 0.92,
+    subtitleGapOffset: 52,
+  },
+  simplifiedChinese: {
+    fontFamily: '"PingFang SC", "Hiragino Sans GB", sans-serif',
+    fontLoadFamily: '"PingFang SC"',
+    fontWeight: 700,
+    direction: "ltr",
+    lang: "zh-Hans",
+    textTransform: "none",
+    wrapMode: "cjk",
+    maxSubtitleLines: 2,
+    descSizeMinScale: 0.7,
+    lineHeightRatio: 0.92,
+    subtitleGapOffset: 52,
+  },
+  traditionalChinese: {
+    fontFamily: '"PingFang TC", "PingFang HK", "Hiragino Sans GB", sans-serif',
+    fontLoadFamily: '"PingFang TC"',
+    fontWeight: 700,
+    direction: "ltr",
+    lang: "zh-Hant",
+    textTransform: "none",
+    wrapMode: "cjk",
+    maxSubtitleLines: 2,
+    descSizeMinScale: 0.7,
+    lineHeightRatio: 0.92,
     subtitleGapOffset: 52,
   },
   arabic: {
@@ -123,7 +171,8 @@ function usage() {
     "    --desc 'Trading Card Prices' \\",
     "    --screenshot '/path/to/screenshot.png' \\",
     "    --output '/path/to/output.png' \\",
-    "    [--device auto|iphone-67|ipad-13]",
+    "    [--device auto|iphone-67|ipad-13] \\",
+    "    [--locale auto|en|ko|ja|zh-Hans|zh-Hant|ar]",
   ].join("\n");
 }
 
@@ -153,6 +202,11 @@ function parseArgs(argv) {
     throw new Error(`Unsupported device '${device}'\n\n${usage()}`);
   }
 
+  const locale = values.locale ?? "auto";
+  if (!["auto", ...Object.keys(localeTypographyMap)].includes(locale)) {
+    throw new Error(`Unsupported locale '${locale}'\n\n${usage()}`);
+  }
+
   return {
     background: values.bg,
     verb: values.verb,
@@ -160,6 +214,7 @@ function parseArgs(argv) {
     screenshotPath: path.resolve(values.screenshot),
     outputPath: path.resolve(values.output),
     device,
+    locale,
   };
 }
 
@@ -245,6 +300,12 @@ function detectScript(text) {
   if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/u.test(text)) {
     return "korean";
   }
+  if (/[\u3040-\u30FF\u31F0-\u31FF\uFF66-\uFF9D]/u.test(text)) {
+    return "japanese";
+  }
+  if (/[\u4E00-\u9FFF\u3400-\u4DBF]/u.test(text)) {
+    return "simplifiedChinese";
+  }
   if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/u.test(text)) {
     return "arabic";
   }
@@ -260,8 +321,11 @@ async function main() {
   const profile = profiles[profileName];
   const screenshotDataUrl = await fileToDataUrl(options.screenshotPath);
   const frameDataUrl = profile.framePath ? await fileToDataUrl(profile.framePath) : null;
-  const script = detectScript(`${options.verb} ${options.desc}`);
-  const typography = typographyProfiles[script];
+  const typographyKey =
+    options.locale === "auto"
+      ? detectScript(`${options.verb} ${options.desc}`)
+      : localeTypographyMap[options.locale];
+  const typography = typographyProfiles[typographyKey];
 
   const renderConfig = {
     background: options.background,

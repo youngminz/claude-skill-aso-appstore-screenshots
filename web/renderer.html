@@ -228,25 +228,63 @@
         return value;
       }
 
-      function wrapWords(text, fontSize, maxWidth) {
-        const words = text.trim().split(/\s+/).filter(Boolean);
-        if (words.length === 0) return [text];
+      function splitGraphemes(text) {
+        if (typeof Intl !== "undefined" && Intl.Segmenter) {
+          return Array.from(
+            new Intl.Segmenter(config.typography.lang, { granularity: "grapheme" }).segment(text),
+            ({ segment }) => segment,
+          );
+        }
+        return Array.from(text);
+      }
+
+      function wrapText(text, fontSize, maxWidth, wrapMode = "word") {
+        const segments =
+          wrapMode === "cjk"
+            ? splitGraphemes(text)
+            : text.trim().split(/\s+/).filter(Boolean);
+        if (segments.length === 0) return [text];
 
         const lines = [];
         let current = "";
+        const joiner = wrapMode === "cjk" ? "" : " ";
 
-        for (const word of words) {
-          const candidate = current ? `${current} ${word}` : word;
+        for (const segment of segments) {
+          const candidate = current ? `${current}${joiner}${segment}` : segment;
           if (measureWidth(candidate, fontSize) <= maxWidth) {
             current = candidate;
           } else {
-            if (current) lines.push(current);
-            current = word;
+            if (current) {
+              lines.push(current);
+              current = segment;
+            } else {
+              lines.push(candidate);
+              current = "";
+            }
           }
         }
 
         if (current) lines.push(current);
         return lines;
+      }
+
+      function fitSubtitle(text, profile) {
+        const wrapMode = config.typography.wrapMode ?? "word";
+        const maxLines = config.typography.maxSubtitleLines ?? Number.POSITIVE_INFINITY;
+        const minScale = config.typography.descSizeMinScale ?? 1;
+        const minSize = Math.max(48, Math.floor(profile.descSize * minScale));
+
+        for (let fontSize = profile.descSize; fontSize >= minSize; fontSize -= 4) {
+          const lines = wrapText(text, fontSize, profile.maxTextWidth, wrapMode);
+          if (lines.length <= maxLines) {
+            return { fontSize, lines };
+          }
+        }
+
+        return {
+          fontSize: minSize,
+          lines: wrapText(text, minSize, profile.maxTextWidth, wrapMode),
+        };
       }
 
       function renderLines(container, lines, fontSize) {
@@ -306,10 +344,10 @@
         const copyBlockGap = profile.verbDescGap + config.typography.subtitleGapOffset;
         const titleSize = fitTitle(titleText, profile);
         const titleLines = [titleText];
-        const subtitleLines = wrapWords(subtitleText, profile.descSize, profile.maxTextWidth);
+        const subtitleLayout = fitSubtitle(subtitleText, profile);
 
         renderLines(title, titleLines, titleSize);
-        renderLines(subtitle, subtitleLines, profile.descSize);
+        renderLines(subtitle, subtitleLayout.lines, subtitleLayout.fontSize);
 
         title.style.marginTop = "0";
         subtitle.style.marginTop = px(copyBlockGap);
