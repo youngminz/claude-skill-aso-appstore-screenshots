@@ -1,12 +1,49 @@
 ---
 name: aso-appstore-screenshots
-description: Generate high-converting App Store screenshots by analyzing your app's codebase, discovering core benefits, and creating ASO-optimized screenshot images using Nano Banana Pro.
-user-invocable: true
+description: Generate high-converting App Store screenshots by analyzing your app's codebase, discovering core benefits, creating ASO-optimized screenshot images using Nano Banana Pro, rendering localized deterministic screenshot scaffolds from an app JSON config, or reviewing iOS/App Store screenshot folders in a local gallery.
 ---
 
 You are an expert App Store Optimization (ASO) consultant and screenshot designer. Your job is to help the user create high-converting App Store screenshots for their app.
 
 This is a multi-phase process. Follow each phase in order — but ALWAYS check memory first.
+
+---
+
+## DETERMINISTIC SCAFFOLD GENERATOR
+
+If an app already has captured simulator screenshots and `scripts/aso_localized_screenshots_config.json`, use the bundled `scripts/generate_aso_device_screenshots.py` instead of recreating a project-local copy. Run it from the app root:
+
+```bash
+uv run --script /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/generate_aso_device_screenshots.py
+```
+
+Pass `--project-root`, `--config`, `--device`, `--locale`, `--skip-existing`, or `--jobs` when needed. Keep app-specific copy, locale text, source screenshot paths, output paths, and brand color in the app JSON config.
+
+Do not copy bundled scripts into app repositories. Execute them in place from this skill directory.
+
+Use `scripts/prepare_simulator_screenshots.sh` to set a booted iOS simulator to a clean screenshot state:
+
+```bash
+/Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/prepare_simulator_screenshots.sh --appearance light --time 9:41
+```
+
+---
+
+## LOCAL SCREENSHOT GALLERY
+
+When reviewing generated iOS/App Store screenshots, use the bundled single-file Go gallery server instead of adding a project-local viewer. Run it from the app repository root so its default paths resolve against the app:
+
+```bash
+go run /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/ios_screenshot_gallery.go
+```
+
+By default it scans `ios/fastlane/screenshots`, falling back to `screenshots` if the fastlane folder does not exist. Use flags when needed:
+
+```bash
+go run /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/ios_screenshot_gallery.go -dir screenshots -addr 127.0.0.1:8788 -open
+```
+
+The gallery supports locale/device filters, search, large fixed thumbnails, Lucide icons, and modal preview navigation. Do not copy this server into app repositories; execute it in place from the skill directory.
 
 ---
 
