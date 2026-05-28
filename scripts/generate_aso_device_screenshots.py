@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import os
 import json
+import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,7 +23,8 @@ from PIL import Image
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = Path("scripts") / "aso_localized_screenshots_config.json"
-JPG_QUALITY = 95
+PNGQUANT_QUALITY = "80-95"
+PNGQUANT_SPEED = 1
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,7 @@ class DeviceConfig:
     source_filename_prefix: str
     source_glob: str | None
     output_root: Path
+    output_subdir: str | None
     compose_device: str
     target_size: tuple[int, int]
 
@@ -143,6 +146,7 @@ def load_config(config_path: Path, project_root: Path) -> AppConfig:
             source_filename_prefix=item.get("sourceFilenamePrefix", ""),
             source_glob=item.get("sourceGlob"),
             output_root=resolve_from_root(project_root, Path(item["outputRoot"])),
+            output_subdir=item.get("outputSubdir"),
             compose_device=item["composeDevice"],
             target_size=(item["targetSize"][0], item["targetSize"][1]),
         )
@@ -261,13 +265,36 @@ def compose_output_png(
     subprocess.run(command, check=True, cwd=SKILL_DIR)
 
 
-def save_output_jpg(source_png: Path, output_jpg: Path, target_size: tuple[int, int]) -> None:
-    output_jpg.parent.mkdir(parents=True, exist_ok=True)
+def save_output_png(
+    source_png: Path,
+    output_png: Path,
+    target_size: tuple[int, int],
+) -> None:
+    output_png.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(source_png) as image:
         image = image.convert("RGB")
         if image.size != target_size:
             image = image.resize(target_size, Image.Resampling.LANCZOS)
-        image.save(output_jpg, format="JPEG", quality=JPG_QUALITY, optimize=True)
+        image.save(output_png, format="PNG", optimize=True, compress_level=9)
+
+    pngquant_path = shutil.which("pngquant")
+    if not pngquant_path:
+        raise FileNotFoundError("pngquant is required but was not found")
+
+    subprocess.run(
+        [
+            pngquant_path,
+            "--force",
+            "--strip",
+            "--skip-if-larger",
+            f"--quality={PNGQUANT_QUALITY}",
+            f"--speed={PNGQUANT_SPEED}",
+            "--ext",
+            ".png",
+            str(output_png),
+        ],
+        check=True,
+    )
 
 
 def list_source_files(device: DeviceConfig, locale: LocaleConfig) -> tuple[Path, ...]:
@@ -318,6 +345,8 @@ def build_render_tasks(
         device.output_root.mkdir(parents=True, exist_ok=True)
         for locale in locale_configs:
             locale_output_dir = device.output_root / locale.output_locale
+            if device.output_subdir:
+                locale_output_dir = locale_output_dir / device.output_subdir
             locale_output_dir.mkdir(parents=True, exist_ok=True)
 
             for shot in locale.shots:
@@ -325,9 +354,7 @@ def build_render_tasks(
                 if not screenshot_path.exists():
                     raise FileNotFoundError(f"Missing screenshot source: {screenshot_path}")
 
-                output_path = locale_output_dir / f"{shot.slug}.jpg"
-                stale_png_path = locale_output_dir / f"{shot.slug}.png"
-                stale_png_path.unlink(missing_ok=True)
+                output_path = locale_output_dir / f"{shot.slug}.png"
                 if skip_existing and output_path.exists():
                     print(f"skip {display_path(output_path, project_root)}")
                     continue
@@ -344,10 +371,15 @@ def build_render_tasks(
     return tuple(tasks)
 
 
-def render_task(task: RenderTask, brand_color: str, temp_root: Path) -> Path:
+def render_task(
+    task: RenderTask,
+    brand_color: str,
+    temp_root: Path,
+) -> Path:
+    device_temp_name = task.device.output_subdir or task.device.output_root.name
     temp_png_path = (
         temp_root
-        / f"{task.device.output_root.name}-{task.locale.output_locale}-{task.shot.slug}.png"
+        / f"{device_temp_name}-{task.locale.output_locale}-{task.shot.slug}.png"
     )
     screenshot_path = resolve_screenshot_path(task.device, task.locale, task.shot)
 
@@ -360,7 +392,11 @@ def render_task(task: RenderTask, brand_color: str, temp_root: Path) -> Path:
         compose_device=task.device.compose_device,
         brand_color=brand_color,
     )
-    save_output_jpg(temp_png_path, task.output_path, task.device.target_size)
+    save_output_png(
+        temp_png_path,
+        task.output_path,
+        task.device.target_size,
+    )
     return task.output_path
 
 
@@ -386,7 +422,13 @@ def generate_device_outputs(
         max_workers = max(1, min(jobs, len(tasks)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(render_task, task, brand_color, temp_root): task for task in tasks
+                executor.submit(
+                    render_task,
+                    task,
+                    brand_color,
+                    temp_root,
+                ): task
+                for task in tasks
             }
             for future in as_completed(futures):
                 output_path = future.result()

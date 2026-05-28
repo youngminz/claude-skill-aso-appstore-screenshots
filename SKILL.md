@@ -21,6 +21,8 @@ Pass `--project-root`, `--config`, `--device`, `--locale`, `--skip-existing`, or
 
 Do not copy bundled scripts into app repositories. Execute them in place from this skill directory.
 
+The deterministic generator writes PNG output only and applies `pngquant` with fixed quality `80-95` and speed `1`. This requires `pngquant` on PATH.
+
 Use `scripts/prepare_simulator_screenshots.sh` to set a booted iOS simulator to a clean screenshot state:
 
 ```bash
