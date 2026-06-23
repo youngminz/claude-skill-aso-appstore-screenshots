@@ -17,7 +17,7 @@ If an app already has captured simulator screenshots and `scripts/aso_localized_
 uv run --script /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/generate_aso_device_screenshots.py
 ```
 
-Pass `--project-root`, `--config`, `--device`, `--locale`, `--skip-existing`, or `--jobs` when needed. Keep app-specific copy, locale text, source screenshot paths, output paths, and brand color in the app JSON config.
+Pass `--project-root`, `--config`, `--device`, `--locale`, `--skip-existing`, or `--jobs` when needed. Keep app-specific copy, locale text, source screenshot paths, output paths, and brand color in the app JSON config. Store each screenshot's shared meaning as `shots[].intent`, and each locale's visible headline as `copy[slug].line1` and `copy[slug].line2`. Legacy `verb`/`desc` configs still render, but new configs should use `line1`/`line2`.
 
 Do not copy bundled scripts into app repositories. Execute them in place from this skill directory.
 
@@ -124,7 +124,7 @@ Adapt your questions based on what you can and can't determine from the code. Do
 
 Based on your analysis and the user's input, draft 3-5 core benefits. Each benefit MUST:
 
-1. **Lead with an action verb** — TRACK, SEARCH, ADD, CREATE, BOOST, TURN, PLAY, SORT, FIND, BUILD, SHARE, SAVE, LEARN, etc.
+1. **Have one clear benefit intent** — the language-neutral meaning the screenshot must communicate.
 2. **Focus on what the USER gets**, not what the app does technically
 3. **Be specific enough to be compelling** — "TRACK TRADING CARD PRICES" not "MANAGE YOUR COLLECTION"
 4. **Answer the user's unspoken question**: "Why should I download this instead of scrolling past?"
@@ -134,9 +134,9 @@ Present the benefits to the user in this format:
 ```
 Here are the core benefits I'd recommend for your screenshots:
 
-1. [ACTION VERB] + [BENEFIT] — [why this drives downloads]
-2. [ACTION VERB] + [BENEFIT] — [why this drives downloads]
-3. [ACTION VERB] + [BENEFIT] — [why this drives downloads]
+1. [BENEFIT INTENT] — [why this drives downloads]
+2. [BENEFIT INTENT] — [why this drives downloads]
+3. [BENEFIT INTENT] — [why this drives downloads]
 ...
 ```
 
@@ -146,14 +146,14 @@ DO NOT proceed until the user explicitly confirms the benefits. This is an itera
 
 - Let the user reorder, reword, add, or remove benefits
 - Suggest alternatives if the user isn't happy
-- Explain your reasoning — why a particular verb or phrasing converts better
+- Explain your reasoning — why a particular headline line or phrasing converts better
 - The user has final say, but push back (politely) if they're choosing something generic over something specific
 
 ### Step 5: Save to Memory
 
 Once the user confirms the final benefits, save them to the Claude Code memory system. Create or update a memory file (e.g., `aso_benefits.md`) with:
 - The app name and bundle ID
-- The confirmed benefits list (in order), each with the full headline (ACTION VERB + BENEFIT DESCRIPTOR)
+- The confirmed benefits list (in order), each with the shared benefit intent and any approved locale headline lines
 - The target audience
 - Key app context (what the app does, niche, competitors mentioned)
 - Any reasoning or user preferences noted during refinement (e.g., "user prefers 'TRACK' over 'MONITOR'")
@@ -286,9 +286,18 @@ Default to **1290 x 2796px** (iPhone 6.7") unless the user specifies otherwise. 
 
 Each screenshot follows this exact high-converting ASO format. **Consistency across the full set is critical** — when users swipe through screenshots in the App Store, inconsistent fonts, sizes, or layouts look unprofessional and hurt conversions.
 
+### Localized Copy Rules
+
+For localized screenshot copy, do not force English headline grammar onto other languages. Start from the shared `intent`, then transcreate the two visible lines for each locale:
+
+- `line1`: the strongest local hook
+- `line2`: the supporting payoff
+
+Reject copy that sounds like a direct translation from English, uses awkward commands, optimizes for matching English structure over instant comprehension, or is grammatically correct but not natural app-store advertising. Before finalizing each locale, self-check that a native speaker would find it natural, the value is clear in under one second, the text is short enough for the screenshot, and the copy avoids literal translation.
+
 **Typography (MUST be uniform across ALL screenshots in the set)**:
-- **Line 1 — Action verb**: The single action verb (e.g., "TRACK", "SEARCH", "BOOST"). This is the BIGGEST, boldest text on the screenshot. White and center-aligned. For Latin languages it should be uppercase. For Korean, Japanese, Chinese, and Arabic, preserve the native script with no forced uppercase.
-- **Line 2 — Benefit descriptor**: The rest of the headline (e.g., "TRADING CARD PRICES", "ANY VERSE IN SECONDS"). Noticeably smaller than line 1, but still bold, white, and center-aligned. For Latin languages it should be uppercase. For Korean, Japanese, Chinese, and Arabic, preserve the native script with no forced uppercase.
+- **Line 1 — Local hook**: The strongest first line for that locale. This is the BIGGEST, boldest text on the screenshot. For English and similar markets this may be a short action verb such as "TRACK", "SEARCH", or "BOOST". For other languages it may be a noun phrase, result phrase, condition phrase, or any natural local advertising fragment. Do not force a literal verb.
+- **Line 2 — Supporting payoff**: The rest of the headline (e.g., "TRADING CARD PRICES", "ANY VERSE IN SECONDS"). Noticeably smaller than line 1, but still bold, white, and center-aligned. For Latin languages it should be uppercase. For Korean, Japanese, Chinese, and Arabic, preserve the native script with no forced uppercase.
 - **Font**: Use a locale-appropriate heavy sans-serif rather than forcing one font across every script. Default mapping for deterministic scaffolds is: English/Latin → SF Pro Display Black, Korean → Pretendard, Japanese → Hiragino Sans, Simplified Chinese → PingFang SC, Traditional Chinese → PingFang TC, Arabic → SF Arabic.
 - **Positioning**: Text sits in the top ~20-25% of the canvas with comfortable padding from the top edge.
 - **Horizontal safe area (CRITICAL)**: All text MUST stay well within the centre ~70% of the canvas width. Leave generous horizontal margins on both sides — at least 15% padding from each edge. This is essential because the post-processing step crops the sides of the image to convert from 9:16 to Apple's narrower aspect ratio. Any text near the left or right edges WILL be cut off. Keep headlines short enough to fit comfortably within this safe zone. If a headline is too long, break it across more lines rather than extending to the edges.
@@ -341,17 +350,17 @@ mkdir -p screenshots/01-[benefit-slug] screenshots/02-[benefit-slug] screenshots
 npm --prefix "$SKILL_DIR" install && \
 npx --prefix "$SKILL_DIR" playwright install chromium && \
 node "$SKILL_DIR/compose.mjs" \
-  --bg "[HEX CODE]" --verb "[VERB 1]" --desc "[DESC 1]" \
+  --bg "[HEX CODE]" --line1 "[LINE 1]" --line2 "[LINE 2]" \
   --screenshot [path/to/screenshot-1.png] \
   --output screenshots/01-[benefit-slug]/scaffold.png \
   --locale [auto|en|ko|ja|zh-Hans|zh-Hant|ar] && \
 node "$SKILL_DIR/compose.mjs" \
-  --bg "[HEX CODE]" --verb "[VERB 2]" --desc "[DESC 2]" \
+  --bg "[HEX CODE]" --line1 "[LINE 1]" --line2 "[LINE 2]" \
   --screenshot [path/to/screenshot-2.png] \
   --output screenshots/02-[benefit-slug]/scaffold.png \
   --locale [auto|en|ko|ja|zh-Hans|zh-Hant|ar] && \
 node "$SKILL_DIR/compose.mjs" \
-  --bg "[HEX CODE]" --verb "[VERB 3]" --desc "[DESC 3]" \
+  --bg "[HEX CODE]" --line1 "[LINE 1]" --line2 "[LINE 2]" \
   --screenshot [path/to/screenshot-3.png] \
   --output screenshots/03-[benefit-slug]/scaffold.png \
   --locale [auto|en|ko|ja|zh-Hans|zh-Hant|ar]
@@ -360,7 +369,7 @@ node "$SKILL_DIR/compose.mjs" \
 Use `--locale zh-Hans` or `--locale zh-Hant` explicitly for Chinese copy. Han-only text is ambiguous, so auto-detection is not reliable enough there.
 
 This outputs pixel-perfect 1290×2796 PNGs with:
-- Bold white headline text (verb auto-sized to fit canvas width)
+- Bold white headline text (line 1 auto-sized to fit canvas width)
 - CSS-rendered iPhone or iPad device shell
 - Simulator screenshot composited inside the frame
 - Solid background colour
@@ -563,7 +572,7 @@ After each screenshot is generated (or after the full set is complete), save gen
 - **Brand colour**: name + hex code
 - **Target display size**: e.g., iPhone 6.7" (1290x2796)
 - **For each generated screenshot**:
-  - Benefit headline (ACTION VERB + DESCRIPTOR)
+  - Benefit headline lines (`line1` + `line2`) and shared intent
   - Benefit subfolder path (e.g., `screenshots/01-track-card-prices/`)
   - Which version the user chose (v1, v2, or v3)
   - Final file path (e.g., `screenshots/final/01-track-card-prices.jpg`)
@@ -595,7 +604,7 @@ Show the showcase image to the user using the Read tool. This is a shareable pre
 
 - **Benefits over features**: "BOOST ENGAGEMENT" not "ADD SUBTITLES TO VIDEOS"
 - **Specific over generic**: "TRACK TRADING CARD PRICES" not "MANAGE YOUR STUFF"
-- **Action-oriented**: Every headline starts with a strong verb
+- **Locale-native over literal**: transcreate from the shared intent instead of copying English grammar.
 - **User-centric**: Frame everything from the downloader's perspective
 - **Conversion-focused**: Every decision should answer "will this make someone tap Download?"
 - The first screenshot is the most important — it must communicate the single biggest reason to download

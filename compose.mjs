@@ -210,8 +210,8 @@ function usage() {
     "Usage:",
     "  node compose.mjs \\",
     "    --bg '#E31837' \\",
-    "    --verb 'Track' \\",
-    "    --desc 'Trading Card Prices' \\",
+    "    --line1 'Track' \\",
+    "    --line2 'Trading Card Prices' \\",
     "    --screenshot '/path/to/screenshot.png' \\",
     "    --output '/path/to/output.png' \\",
     "    [--device auto|iphone-67|ipad-13] \\",
@@ -234,7 +234,12 @@ function parseArgs(argv) {
     index += 1;
   }
 
-  for (const key of ["bg", "verb", "desc", "screenshot", "output"]) {
+  const line1 = values.line1 ?? values.verb;
+  const line2 = values.line2 ?? values.desc;
+  values.line1 = line1;
+  values.line2 = line2;
+
+  for (const key of ["bg", "line1", "line2", "screenshot", "output"]) {
     if (!values[key]) {
       throw new Error(usage());
     }
@@ -252,8 +257,8 @@ function parseArgs(argv) {
 
   return {
     background: values.bg,
-    verb: values.verb,
-    desc: values.desc,
+    verb: values.line1,
+    desc: values.line2,
     screenshotPath: path.resolve(values.screenshot),
     outputPath: path.resolve(values.output),
     device,

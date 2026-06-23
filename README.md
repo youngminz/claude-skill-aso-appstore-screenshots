@@ -46,8 +46,8 @@ Run it with:
 ```bash
 npm run compose -- \
   --bg '#E31837' \
-  --verb 'Track' \
-  --desc 'Trading Card Prices' \
+  --line1 'Track' \
+  --line2 'Trading Card Prices' \
   --screenshot /path/to/screenshot.png \
   --output /path/to/output.png \
   --locale auto

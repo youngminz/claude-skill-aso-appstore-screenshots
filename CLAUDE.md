@@ -11,7 +11,7 @@ A Claude Code skill (`aso-appstore-screenshots`) that guides users through creat
 Four files + one asset make up the skill:
 
 - **SKILL.md** — The skill prompt. Defines a multi-phase workflow: Benefit Discovery → Screenshot Pairing → Generation. Uses Claude Code's memory system to persist state across conversations so users can resume mid-workflow. Generation first creates a deterministic scaffold via `compose.mjs`, then sends it to Nano Banana Pro for AI enhancement.
-- **compose.mjs** — The primary screenshot renderer. It uses Playwright + HTML/CSS to deterministically render App Store screenshot scaffolds from a background hex colour, action verb, benefit descriptor, locale, and simulator screenshot path. The device shell is rendered directly in HTML/CSS.
+- **compose.mjs** — The primary screenshot renderer. It uses Playwright + HTML/CSS to deterministically render App Store screenshot scaffolds from a background hex colour, localized headline lines, locale, and simulator screenshot path. The device shell is rendered directly in HTML/CSS.
 - **generate_frame.py** — Legacy utility that generates a standalone device frame PNG (`assets/device_frame.png`) kept as a reference asset.
 - **showcase.py** — Generates a showcase image showing up to 3 final screenshots side-by-side with an optional GitHub link at the bottom. Used as the final step after all screenshots are approved.
 - **assets/device_frame.png** — Legacy reference frame asset retained for compatibility. It is no longer used by `compose.mjs`.
@@ -27,8 +27,8 @@ Four files + one asset make up the skill:
 
 node compose.mjs \
   --bg "#E31837" \
-  --verb "TRACK" \
-  --desc "TRADING CARD PRICES" \
+  --line1 "TRACK" \
+  --line2 "TRADING CARD PRICES" \
   --screenshot path/to/simulator.png \
   --output output.png \
   --locale auto
@@ -39,7 +39,7 @@ node compose.mjs \
 - **Two-stage generation**: `compose.mjs` creates a deterministic scaffold first (text + CSS device shell + screenshot), then Nano Banana Pro enhances it. This avoids the inconsistencies of generating from scratch.
 - **compose.mjs outputs exact App Store Connect dimensions** (1290×2796 for iPhone 6.7") — no post-processing crop needed.
 - **Device shell is CSS-rendered** — iPhone and iPad hardware outlines are drawn directly in `web/renderer.html`, so the scaffold no longer depends on a frame overlay image.
-- **Verb text auto-sizes** — shrinks from 172px down to 100px to fit multi-word verbs (e.g. "TURN YOURSELF") within the canvas width.
+- **Line 1 text auto-sizes** — shrinks from 172px down to 100px to fit longer localized hooks (e.g. "TURN YOURSELF") within the canvas width.
 - **Typography is locale-aware** — English uses SF Pro Display Black, Korean uses Pretendard, Japanese uses Hiragino Sans, Simplified Chinese uses PingFang SC, Traditional Chinese uses PingFang TC, and Arabic uses SF Arabic.
 - **CJK subtitle layout is character-based** — Japanese and Chinese do not rely on whitespace wrapping, and subtitles can shrink slightly when 2 lines are still too wide.
 - **Prefer explicit Chinese locale selection** — use `--locale zh-Hans` or `--locale zh-Hant` because Han-only copy is ambiguous under auto-detection.

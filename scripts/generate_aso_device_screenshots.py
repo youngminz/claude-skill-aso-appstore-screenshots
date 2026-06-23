@@ -30,6 +30,7 @@ PNGQUANT_SPEED = 1
 @dataclass(frozen=True)
 class ShotDefinition:
     slug: str
+    intent: str | None = None
     source_filename: str | None = None
     source_index: int | None = None
 
@@ -39,8 +40,8 @@ class ShotCopy:
     slug: str
     source_filename: str | None
     source_index: int | None
-    verb: str
-    desc: str
+    line1: str
+    line2: str
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,7 @@ def load_config(config_path: Path, project_root: Path) -> AppConfig:
     shots = tuple(
         ShotDefinition(
             slug=item["slug"],
+            intent=item.get("intent"),
             source_filename=item.get("sourceFilename"),
             source_index=item.get("sourceIndex"),
         )
@@ -160,6 +162,13 @@ def load_config(config_path: Path, project_root: Path) -> AppConfig:
         locale_shots = []
         for shot in shots:
             shot_copy = copies[shot.slug]
+            line1 = shot_copy.get("line1", shot_copy.get("verb"))
+            line2 = shot_copy.get("line2", shot_copy.get("desc"))
+            if line1 is None or line2 is None:
+                raise ValueError(
+                    f"{config_path}: locale {locale_item['outputLocale']} copy for {shot.slug} "
+                    "must define line1/line2"
+                )
             locale_shots.append(
                 ShotCopy(
                     slug=shot.slug,
@@ -168,8 +177,8 @@ def load_config(config_path: Path, project_root: Path) -> AppConfig:
                         shot.source_filename,
                     ),
                     source_index=shot.source_index,
-                    verb=shot_copy["verb"],
-                    desc=shot_copy["desc"],
+                    line1=line1,
+                    line2=line2,
                 )
             )
         locale_configs.append(
@@ -238,8 +247,8 @@ def ensure_skill_assets_available() -> None:
 def compose_output_png(
     screenshot_path: Path,
     output_path: Path,
-    verb: str,
-    desc: str,
+    line1: str,
+    line2: str,
     compose_locale: str,
     compose_device: str,
     brand_color: str,
@@ -249,10 +258,10 @@ def compose_output_png(
         str(SKILL_DIR / "compose.mjs"),
         "--bg",
         brand_color,
-        "--verb",
-        verb,
-        "--desc",
-        desc,
+        "--line1",
+        line1,
+        "--line2",
+        line2,
         "--screenshot",
         str(screenshot_path),
         "--output",
@@ -386,8 +395,8 @@ def render_task(
     compose_output_png(
         screenshot_path=screenshot_path,
         output_path=temp_png_path,
-        verb=task.shot.verb,
-        desc=task.shot.desc,
+        line1=task.shot.line1,
+        line2=task.shot.line2,
         compose_locale=task.locale.compose_locale,
         compose_device=task.device.compose_device,
         brand_color=brand_color,
