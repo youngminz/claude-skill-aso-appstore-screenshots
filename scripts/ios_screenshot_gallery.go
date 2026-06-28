@@ -806,15 +806,25 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       min-height: 0;
       display: grid;
       grid-template-columns: auto 1fr auto;
-      align-items: center;
+      align-items: stretch;
       gap: 10px;
       padding: 12px;
+    }
+
+    .image-stack {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      justify-items: center;
     }
 
     .modal-stage img {
       display: block;
       max-width: 100%;
-      max-height: calc(100vh - 132px);
+      max-height: 100%;
       justify-self: center;
       object-fit: contain;
       box-shadow: 0 20px 80px rgba(0, 0, 0, 0.38);
@@ -835,13 +845,37 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       padding: 0;
     }
 
+    .nav-button {
+      align-self: center;
+    }
+
+    .locale-nav-button {
+      width: 64px;
+      height: 40px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .locale-nav-button:disabled {
+      opacity: 0.34;
+      cursor: default;
+    }
+
     .lucide {
       width: 17px;
       height: 17px;
       stroke-width: 2;
     }
 
-    .nav-button .lucide {
+    .nav-button .lucide,
+    .locale-nav-button .lucide {
       width: 26px;
       height: 26px;
     }
@@ -896,6 +930,11 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
 
       .nav-button {
         display: none;
+      }
+
+      .locale-nav-button {
+        width: 56px;
+        height: 34px;
       }
     }
   </style>
@@ -955,7 +994,15 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       <button id="prev" type="button" class="nav-button" aria-label="Previous image" title="Previous image">
         <i data-lucide="chevron-left" aria-hidden="true"></i>
       </button>
-      <img id="modalImage" alt="">
+      <div class="image-stack">
+        <button id="prevLocale" type="button" class="locale-nav-button" aria-label="Previous locale" title="Previous locale">
+          <i data-lucide="chevron-up" aria-hidden="true"></i>
+        </button>
+        <img id="modalImage" alt="">
+        <button id="nextLocale" type="button" class="locale-nav-button" aria-label="Next locale" title="Next locale">
+          <i data-lucide="chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
       <button id="next" type="button" class="nav-button" aria-label="Next image" title="Next image">
         <i data-lucide="chevron-right" aria-hidden="true"></i>
       </button>
@@ -989,7 +1036,9 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       modalOpen: document.getElementById("modalOpen"),
       modalClose: document.getElementById("modalClose"),
       prev: document.getElementById("prev"),
-      next: document.getElementById("next")
+      next: document.getElementById("next"),
+      prevLocale: document.getElementById("prevLocale"),
+      nextLocale: document.getElementById("nextLocale")
     };
 
     function imageURL(item) {
@@ -1049,10 +1098,11 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       return item.locale + " / " + item.deviceLabel + "||" + item.locale + "/" + item.device;
     }
 
-    function filteredItems() {
+    function filteredItems(options) {
+      options = options || {};
       var q = state.query.trim().toLowerCase();
       return state.items.filter(function(item) {
-        if (state.locale !== "all" && item.locale !== state.locale) return false;
+        if (!options.ignoreLocale && state.locale !== "all" && item.locale !== state.locale) return false;
         if (state.device !== "all" && item.device !== state.device) return false;
         if (!q) return true;
         var haystack = [
@@ -1066,6 +1116,79 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
         ].join(" ").toLowerCase();
         return haystack.indexOf(q) !== -1;
       });
+    }
+
+    function sameItem(a, b) {
+      return Boolean(a && b && a.path === b.path);
+    }
+
+    function uniqueLocales(items) {
+      var seen = new Set();
+      var locales = [];
+      items.forEach(function(item) {
+        if (seen.has(item.locale)) return;
+        seen.add(item.locale);
+        locales.push(item.locale);
+      });
+      return locales;
+    }
+
+    function indexOfItem(items, target) {
+      for (var i = 0; i < items.length; i++) {
+        if (sameItem(items[i], target)) return i;
+      }
+      return -1;
+    }
+
+    function localeNavigationTarget(current, delta) {
+      if (!current) return null;
+
+      var pool = filteredItems({ ignoreLocale: true });
+      var sameDevicePool = pool.filter(function(item) {
+        return item.device === current.device;
+      });
+      var currentGroup = sameDevicePool.filter(function(item) {
+        return item.locale === current.locale;
+      });
+      var locales = uniqueLocales(sameDevicePool);
+      var nth = indexOfItem(currentGroup, current);
+      var preserveDevice = nth >= 0 && locales.length > 1;
+
+      if (!preserveDevice) {
+        currentGroup = pool.filter(function(item) {
+          return item.locale === current.locale;
+        });
+        locales = uniqueLocales(pool);
+        nth = indexOfItem(currentGroup, current);
+      }
+
+      if (locales.length < 2) return null;
+      var localeIndex = locales.indexOf(current.locale);
+      if (localeIndex < 0) return null;
+
+      var targetLocale = locales[(localeIndex + delta + locales.length) % locales.length];
+      var targetGroup = (preserveDevice ? sameDevicePool : pool).filter(function(item) {
+        return item.locale === targetLocale;
+      });
+      if (targetGroup.length === 0) return null;
+
+      var targetNth = nth < 0 ? 0 : Math.min(nth, targetGroup.length - 1);
+      return targetGroup[targetNth];
+    }
+
+    function openItem(item) {
+      if (!item) return;
+
+      if (state.locale !== "all" && item.locale !== state.locale) {
+        state.locale = item.locale;
+        els.locale.value = item.locale;
+        render();
+      }
+
+      var index = indexOfItem(state.visible, item);
+      if (index >= 0) {
+        openModal(index);
+      }
     }
 
     function renderStatus(total, visible) {
@@ -1150,6 +1273,9 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       els.modalImage.alt = item.title;
       els.modalPath.textContent = item.path;
       els.modalOpen.href = url;
+      var canMoveLocale = localeNavigationTarget(item, 1) !== null;
+      els.prevLocale.disabled = !canMoveLocale;
+      els.nextLocale.disabled = !canMoveLocale;
       els.modal.classList.add("open");
       els.modal.setAttribute("aria-hidden", "false");
     }
@@ -1167,6 +1293,12 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       if (nextIndex < 0) nextIndex = state.visible.length - 1;
       if (nextIndex >= state.visible.length) nextIndex = 0;
       openModal(nextIndex);
+    }
+
+    function moveModalAcrossLocale(delta) {
+      if (state.activeIndex < 0) return;
+      var current = state.visible[state.activeIndex];
+      openItem(localeNavigationTarget(current, delta));
     }
 
     async function load() {
@@ -1204,19 +1336,35 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
     els.modalClose.addEventListener("click", closeModal);
     els.prev.addEventListener("click", function() { moveModal(-1); });
     els.next.addEventListener("click", function() { moveModal(1); });
+    els.prevLocale.addEventListener("click", function() { moveModalAcrossLocale(-1); });
+    els.nextLocale.addEventListener("click", function() { moveModalAcrossLocale(1); });
 
     els.modal.addEventListener("click", function(event) {
       var target = event.target;
       if (!(target instanceof Element)) return;
-      if (target === els.modalImage || target.closest(".modal-actions") || target.closest(".nav-button")) return;
+      if (target === els.modalImage || target.closest(".modal-actions") || target.closest(".nav-button") || target.closest(".locale-nav-button")) return;
       closeModal();
     });
 
     document.addEventListener("keydown", function(event) {
       if (!els.modal.classList.contains("open")) return;
       if (event.key === "Escape") closeModal();
-      if (event.key === "ArrowLeft") moveModal(-1);
-      if (event.key === "ArrowRight") moveModal(1);
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveModal(-1);
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        moveModal(1);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        moveModalAcrossLocale(-1);
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        moveModalAcrossLocale(1);
+      }
     });
 
     createIcons();
