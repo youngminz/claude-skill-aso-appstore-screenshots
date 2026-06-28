@@ -24,17 +24,18 @@ import (
 )
 
 type screenshotItem struct {
-	Path        string `json:"path"`
-	FileName    string `json:"fileName"`
-	Title       string `json:"title"`
-	Locale      string `json:"locale"`
-	Device      string `json:"device"`
-	DeviceLabel string `json:"deviceLabel"`
-	Slot        string `json:"slot"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	Size        int64  `json:"size"`
-	ModTime     string `json:"modTime"`
+	Path          string `json:"path"`
+	FileName      string `json:"fileName"`
+	Title         string `json:"title"`
+	Platform      string `json:"platform"`
+	PlatformLabel string `json:"platformLabel"`
+	Group         string `json:"group"`
+	Collection    string `json:"collection"`
+	Slot          string `json:"slot"`
+	Width         int    `json:"width"`
+	Height        int    `json:"height"`
+	Size          int64  `json:"size"`
+	ModTime       string `json:"modTime"`
 }
 
 type countOption struct {
@@ -47,16 +48,12 @@ type galleryResponse struct {
 	Root      string           `json:"root"`
 	ScannedAt string           `json:"scannedAt"`
 	Total     int              `json:"total"`
-	Locales   []countOption    `json:"locales"`
-	Devices   []countOption    `json:"devices"`
+	Platforms []countOption    `json:"platforms"`
 	Items     []screenshotItem `json:"items"`
 }
 
 func main() {
-	defaultDir := "ios/fastlane/screenshots"
-	if _, err := os.Stat(defaultDir); err != nil {
-		defaultDir = "screenshots"
-	}
+	defaultDir := defaultScreenshotDir()
 
 	dirFlag := flag.String("dir", defaultDir, "screenshot directory to scan")
 	addrFlag := flag.String("addr", "127.0.0.1:8787", "address to listen on")
@@ -120,7 +117,7 @@ func main() {
 	}
 
 	url := localURL(ln.Addr())
-	fmt.Printf("iOS screenshot gallery\n")
+	fmt.Printf("Screenshot gallery\n")
 	fmt.Printf("Directory: %s\n", rootAbs)
 	fmt.Printf("URL: %s\n", url)
 	fmt.Printf("Stop with Ctrl-C\n")
@@ -141,8 +138,8 @@ func main() {
 
 func scanScreenshots(root string) (galleryResponse, error) {
 	items := make([]screenshotItem, 0, 512)
-	localeCounts := map[string]int{}
-	deviceCounts := map[string]int{}
+	platformCounts := map[string]int{}
+	storeRootMode := containsStoreScreenshotRoots(root)
 
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -168,13 +165,9 @@ func scanScreenshots(root string) (galleryResponse, error) {
 		parts := strings.Split(rel, "/")
 		dirParts := parts[:maxInt(0, len(parts)-1)]
 
-		locale := "root"
-		device := "root"
-		if len(dirParts) > 0 && dirParts[0] != "" {
-			locale = dirParts[0]
-		}
-		if len(dirParts) > 1 && dirParts[1] != "" {
-			device = dirParts[1]
+		platform, group, collection := classifyScreenshot(root, dirParts)
+		if storeRootMode && platform == "other" {
+			return nil
 		}
 
 		info, err := entry.Info()
@@ -190,20 +183,20 @@ func scanScreenshots(root string) (galleryResponse, error) {
 		}
 
 		items = append(items, screenshotItem{
-			Path:        rel,
-			FileName:    name,
-			Title:       titleFromFileName(name),
-			Locale:      locale,
-			Device:      device,
-			DeviceLabel: deviceLabel(device),
-			Slot:        slot,
-			Width:       width,
-			Height:      height,
-			Size:        info.Size(),
-			ModTime:     info.ModTime().Format(time.RFC3339),
+			Path:          rel,
+			FileName:      name,
+			Title:         titleFromFileName(name),
+			Platform:      platform,
+			PlatformLabel: platformLabel(platform),
+			Group:         group,
+			Collection:    collection,
+			Slot:          slot,
+			Width:         width,
+			Height:        height,
+			Size:          info.Size(),
+			ModTime:       info.ModTime().Format(time.RFC3339),
 		})
-		localeCounts[locale]++
-		deviceCounts[device]++
+		platformCounts[platform]++
 		return nil
 	})
 	if err != nil {
@@ -213,11 +206,20 @@ func scanScreenshots(root string) (galleryResponse, error) {
 	sort.Slice(items, func(i, j int) bool {
 		a := items[i]
 		b := items[j]
-		if a.Locale != b.Locale {
-			return a.Locale < b.Locale
+		if platformSortRank(a.Platform) != platformSortRank(b.Platform) {
+			return platformSortRank(a.Platform) < platformSortRank(b.Platform)
 		}
-		if a.Device != b.Device {
-			return a.Device < b.Device
+		if a.Platform != b.Platform {
+			return a.Platform < b.Platform
+		}
+		if a.Group != b.Group {
+			return a.Group < b.Group
+		}
+		if a.Collection != b.Collection {
+			if collectionSortRank(a) != collectionSortRank(b) {
+				return collectionSortRank(a) < collectionSortRank(b)
+			}
+			return a.Collection < b.Collection
 		}
 		ai := sortSlot(a)
 		bi := sortSlot(b)
@@ -231,32 +233,204 @@ func scanScreenshots(root string) (galleryResponse, error) {
 		Root:      root,
 		ScannedAt: time.Now().Format(time.RFC3339),
 		Total:     len(items),
-		Locales:   countOptions(localeCounts, nil),
-		Devices:   countOptions(deviceCounts, deviceLabel),
+		Platforms: platformOptions(platformCounts),
 		Items:     items,
 	}, nil
 }
 
-func countOptions(counts map[string]int, labelFn func(string) string) []countOption {
+func platformOptions(counts map[string]int) []countOption {
 	options := make([]countOption, 0, len(counts))
 	for value, count := range counts {
-		label := value
-		if labelFn != nil {
-			label = labelFn(value)
-		}
 		options = append(options, countOption{
 			Value: value,
-			Label: label,
+			Label: platformLabel(value),
 			Count: count,
 		})
 	}
 	sort.Slice(options, func(i, j int) bool {
+		if platformSortRank(options[i].Value) != platformSortRank(options[j].Value) {
+			return platformSortRank(options[i].Value) < platformSortRank(options[j].Value)
+		}
 		if options[i].Label != options[j].Label {
 			return options[i].Label < options[j].Label
 		}
 		return options[i].Value < options[j].Value
 	})
 	return options
+}
+
+func defaultScreenshotDir() string {
+	iosDir := "ios/fastlane/screenshots"
+	androidDir := "android/fastlane/metadata"
+
+	iosExists := isDir(iosDir)
+	androidExists := isDir(androidDir)
+	if iosExists && androidExists {
+		return "."
+	}
+	if iosExists {
+		return iosDir
+	}
+	if androidExists {
+		return androidDir
+	}
+	return "screenshots"
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func containsStoreScreenshotRoots(root string) bool {
+	return isDir(filepath.Join(root, "ios", "fastlane", "screenshots")) ||
+		isDir(filepath.Join(root, "android", "fastlane", "metadata"))
+}
+
+func classifyScreenshot(root string, dirParts []string) (string, string, string) {
+	if index := indexSequence(dirParts, "ios", "fastlane", "screenshots"); index >= 0 {
+		group, collection := simpleGroupCollection(dirParts[index+3:])
+		return "ios", group, collection
+	}
+	if index := indexSequence(dirParts, "android", "fastlane", "metadata"); index >= 0 {
+		group, collection := androidGroupCollection(dirParts[index+3:])
+		return "android", group, collection
+	}
+
+	rootKind := classifyRoot(root)
+	switch rootKind {
+	case "ios":
+		group, collection := simpleGroupCollection(dirParts)
+		return "ios", group, collection
+	case "android":
+		group, collection := androidGroupCollection(dirParts)
+		return "android", group, collection
+	}
+
+	if looksLikeAndroidMetadata(dirParts) {
+		group, collection := androidGroupCollection(dirParts)
+		return "android", group, collection
+	}
+	if looksLikeIOSFastlane(dirParts) {
+		group, collection := simpleGroupCollection(dirParts)
+		return "ios", group, collection
+	}
+
+	group, collection := simpleGroupCollection(dirParts)
+	return "other", group, collection
+}
+
+func classifyRoot(root string) string {
+	root = filepath.ToSlash(filepath.Clean(root))
+	root = strings.ToLower(root)
+	if strings.HasSuffix(root, "/ios/fastlane/screenshots") || root == "ios/fastlane/screenshots" {
+		return "ios"
+	}
+	if strings.HasSuffix(root, "/android/fastlane/metadata") || root == "android/fastlane/metadata" {
+		return "android"
+	}
+	if strings.HasSuffix(root, "/android/fastlane/metadata/android") || root == "android/fastlane/metadata/android" {
+		return "android"
+	}
+	return ""
+}
+
+func simpleGroupCollection(dirParts []string) (string, string) {
+	group := "root"
+	collection := "root"
+	if len(dirParts) > 0 && dirParts[0] != "" {
+		group = dirParts[0]
+	}
+	if len(dirParts) > 1 && dirParts[1] != "" {
+		collection = dirParts[1]
+	}
+	return group, collection
+}
+
+func androidGroupCollection(dirParts []string) (string, string) {
+	if len(dirParts) > 0 && strings.EqualFold(dirParts[0], "android") {
+		dirParts = dirParts[1:]
+	}
+
+	if imageIndex := indexPart(dirParts, "images"); imageIndex >= 0 {
+		group := "root"
+		collection := "images"
+		if imageIndex > 0 {
+			group = strings.Join(dirParts[:imageIndex], "/")
+		}
+		if imageIndex+1 < len(dirParts) && dirParts[imageIndex+1] != "" {
+			collection = dirParts[imageIndex+1]
+		}
+		return group, collection
+	}
+
+	return simpleGroupCollection(dirParts)
+}
+
+func indexSequence(parts []string, sequence ...string) int {
+	if len(sequence) == 0 || len(parts) < len(sequence) {
+		return -1
+	}
+	for i := 0; i <= len(parts)-len(sequence); i++ {
+		matched := true
+		for j, part := range sequence {
+			if !strings.EqualFold(parts[i+j], part) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return i
+		}
+	}
+	return -1
+}
+
+func indexPart(parts []string, value string) int {
+	for i, part := range parts {
+		if strings.EqualFold(part, value) {
+			return i
+		}
+	}
+	return -1
+}
+
+func looksLikeAndroidMetadata(dirParts []string) bool {
+	imageIndex := indexPart(dirParts, "images")
+	return imageIndex >= 0 && imageIndex+1 < len(dirParts)
+}
+
+func looksLikeIOSFastlane(dirParts []string) bool {
+	return len(dirParts) > 1 && strings.HasPrefix(strings.ToUpper(dirParts[1]), "APP_")
+}
+
+func platformLabel(platform string) string {
+	switch platform {
+	case "ios":
+		return "iOS"
+	case "android":
+		return "Android"
+	case "other":
+		return "Other"
+	default:
+		if platform == "" {
+			return "Other"
+		}
+		return platform
+	}
+}
+
+func platformSortRank(platform string) int {
+	switch platform {
+	case "ios":
+		return 0
+	case "android":
+		return 1
+	case "other":
+		return 3
+	default:
+		return 2
+	}
 }
 
 func imageSize(path string) (int, int) {
@@ -343,6 +517,35 @@ func sortSlot(item screenshotItem) int {
 	return n
 }
 
+func collectionSortRank(item screenshotItem) int {
+	if item.Platform != "android" {
+		return 100
+	}
+
+	collection := strings.ToLower(item.Collection)
+	switch collection {
+	case "phonescreenshots":
+		return 0
+	case "seveninchscreenshots":
+		return 1
+	case "teninchscreenshots":
+		return 2
+	case "tvscreenshots":
+		return 3
+	case "wearscreenshots":
+		return 4
+	case "featuregraphic":
+		return 50
+	case "icon":
+		return 60
+	default:
+		if strings.Contains(collection, "screenshot") {
+			return 10
+		}
+		return 40
+	}
+}
+
 func titleFromFileName(name string) string {
 	base := strings.TrimSuffix(name, filepath.Ext(name))
 	base = trimLeadingNumber(base)
@@ -394,26 +597,6 @@ func looksLikeUUID(value string) bool {
 	return true
 }
 
-func deviceLabel(device string) string {
-	switch device {
-	case "APP_IPHONE_65":
-		return "iPhone 6.5 inch"
-	case "APP_IPHONE_55":
-		return "iPhone 5.5 inch"
-	case "APP_IPAD_PRO_3GEN_129":
-		return "iPad Pro 12.9 inch 3rd gen"
-	case "APP_IPAD_PRO_129":
-		return "iPad Pro 12.9 inch"
-	case "root":
-		return "Root"
-	default:
-		label := strings.ReplaceAll(device, "_", " ")
-		label = strings.ReplaceAll(label, "-", " ")
-		label = strings.Join(strings.Fields(label), " ")
-		return label
-	}
-}
-
 func maxInt(a int, b int) int {
 	if a > b {
 		return a
@@ -450,7 +633,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>iOS Screenshot Gallery</title>
+  <title>Store Screenshot Gallery</title>
   <style>
     :root {
       --bg: #f6f3ee;
@@ -477,9 +660,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       letter-spacing: 0;
     }
 
-    button,
-    input,
-    select {
+    button {
       font: inherit;
     }
 
@@ -525,55 +706,39 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       white-space: nowrap;
     }
 
-    .filters {
-      display: grid;
-      grid-template-columns: minmax(220px, 1.3fr) minmax(140px, 0.7fr) minmax(180px, 0.9fr);
-      gap: 10px;
-      align-items: center;
-    }
-
-    .control {
-      min-width: 0;
-      position: relative;
-    }
-
-    .control label {
-      display: block;
-      margin: 0 0 5px;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-
-    input,
-    select {
-      width: 100%;
-      height: 38px;
+    .platform-switcher {
+      justify-self: end;
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
       border: 1px solid var(--line);
-      border-radius: 7px;
-      background: #ffffff;
-      color: var(--ink);
-      padding: 0 11px;
-      outline: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
     }
 
-    .control.has-icon input {
-      padding-left: 35px;
-    }
-
-    .field-icon {
-      position: absolute;
-      left: 11px;
-      bottom: 10px;
-      width: 16px;
-      height: 16px;
+    .platform-switcher button {
+      min-width: 86px;
+      height: 34px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
       color: var(--muted);
-      pointer-events: none;
+      padding: 0 12px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 720;
     }
 
-    input:focus,
-    select:focus,
+    .platform-switcher button.is-active {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .platform-switcher button:disabled {
+      opacity: 0.38;
+      cursor: default;
+    }
+
     button:focus-visible {
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(183, 62, 45, 0.17);
@@ -849,7 +1014,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       align-self: center;
     }
 
-    .locale-nav-button {
+    .group-nav-button {
       width: 64px;
       height: 40px;
       border: 1px solid rgba(255, 255, 255, 0.2);
@@ -863,7 +1028,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       padding: 0;
     }
 
-    .locale-nav-button:disabled {
+    .group-nav-button:disabled {
       opacity: 0.34;
       cursor: default;
     }
@@ -875,7 +1040,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
     }
 
     .nav-button .lucide,
-    .locale-nav-button .lucide {
+    .group-nav-button .lucide {
       width: 26px;
       height: 26px;
     }
@@ -907,8 +1072,8 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
         grid-template-columns: 1fr;
       }
 
-      .filters {
-        grid-template-columns: 1fr 1fr;
+      .platform-switcher {
+        justify-self: start;
       }
 
     }
@@ -920,10 +1085,6 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
         padding-right: 14px;
       }
 
-      .filters {
-        grid-template-columns: 1fr;
-      }
-
       .modal-stage {
         grid-template-columns: 1fr;
       }
@@ -932,7 +1093,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
         display: none;
       }
 
-      .locale-nav-button {
+      .group-nav-button {
         width: 56px;
         height: 34px;
       }
@@ -944,25 +1105,11 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
     <header class="topbar">
       <div class="topbar-inner">
         <div>
-          <h1>iOS Screenshot Gallery</h1>
+          <h1>Store Screenshot Gallery</h1>
           <div id="rootPath" class="subline">Loading...</div>
         </div>
 
-        <div class="filters">
-          <div class="control has-icon">
-            <label for="search">Search</label>
-            <i data-lucide="search" class="field-icon" aria-hidden="true"></i>
-            <input id="search" type="search" placeholder="locale, device, file name">
-          </div>
-          <div class="control">
-            <label for="locale">Locale</label>
-            <select id="locale"></select>
-          </div>
-          <div class="control">
-            <label for="device">Device</label>
-            <select id="device"></select>
-          </div>
-        </div>
+        <div id="platformSwitcher" class="platform-switcher" role="group" aria-label="Platform"></div>
 
       </div>
     </header>
@@ -995,11 +1142,11 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
         <i data-lucide="chevron-left" aria-hidden="true"></i>
       </button>
       <div class="image-stack">
-        <button id="prevLocale" type="button" class="locale-nav-button" aria-label="Previous locale" title="Previous locale">
+        <button id="prevGroup" type="button" class="group-nav-button" aria-label="Previous locale" title="Previous locale">
           <i data-lucide="chevron-up" aria-hidden="true"></i>
         </button>
         <img id="modalImage" alt="">
-        <button id="nextLocale" type="button" class="locale-nav-button" aria-label="Next locale" title="Next locale">
+        <button id="nextGroup" type="button" class="group-nav-button" aria-label="Next locale" title="Next locale">
           <i data-lucide="chevron-down" aria-hidden="true"></i>
         </button>
       </div>
@@ -1015,9 +1162,8 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
     var state = {
       items: [],
       visible: [],
-      locale: "all",
-      device: "all",
-      query: "",
+      platforms: [],
+      platform: "all",
       activeIndex: -1
     };
 
@@ -1025,9 +1171,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       rootPath: document.getElementById("rootPath"),
       status: document.getElementById("status"),
       sections: document.getElementById("sections"),
-      search: document.getElementById("search"),
-      locale: document.getElementById("locale"),
-      device: document.getElementById("device"),
+      platformSwitcher: document.getElementById("platformSwitcher"),
       modal: document.getElementById("modal"),
       modalTitle: document.getElementById("modalTitle"),
       modalMeta: document.getElementById("modalMeta"),
@@ -1037,8 +1181,8 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       modalClose: document.getElementById("modalClose"),
       prev: document.getElementById("prev"),
       next: document.getElementById("next"),
-      prevLocale: document.getElementById("prevLocale"),
-      nextLocale: document.getElementById("nextLocale")
+      prevGroup: document.getElementById("prevGroup"),
+      nextGroup: document.getElementById("nextGroup")
     };
 
     function imageURL(item) {
@@ -1080,41 +1224,74 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       return item.width + " x " + item.height;
     }
 
-    function populateSelect(select, options, allLabel) {
-      var current = select.value || "all";
-      var html = "<option value=\"all\">" + escapeHTML(allLabel) + "</option>";
+    function optionCounts(options) {
+      var counts = {};
       options.forEach(function(option) {
-        html += "<option value=\"" + escapeHTML(option.value) + "\">" +
-          escapeHTML(option.label + " (" + option.count + ")") +
-          "</option>";
+        counts[option.value] = option.count;
       });
-      select.innerHTML = html;
-      select.value = Array.from(select.options).some(function(option) {
-        return option.value === current;
-      }) ? current : "all";
+      return counts;
+    }
+
+    function platformChoices() {
+      var counts = optionCounts(state.platforms);
+      var choices = [
+        { value: "all", label: "All", count: state.items.length },
+        { value: "ios", label: "iOS", count: counts.ios || 0 },
+        { value: "android", label: "Android", count: counts.android || 0 }
+      ];
+
+      state.platforms.forEach(function(option) {
+        if (option.value === "ios" || option.value === "android") return;
+        choices.push(option);
+      });
+      return choices;
+    }
+
+    function hasPlatform(value) {
+      return platformChoices().some(function(choice) {
+        return choice.value === value && (choice.value === "all" || choice.count > 0);
+      });
+    }
+
+    function renderPlatformSwitcher() {
+      if (!hasPlatform(state.platform)) state.platform = "all";
+
+      var html = "";
+      platformChoices().forEach(function(choice) {
+        var active = choice.value === state.platform;
+        var disabled = choice.value !== "all" && choice.count === 0;
+        html += "<button type=\"button\" data-platform=\"" + escapeHTML(choice.value) + "\"" +
+          (active ? " class=\"is-active\" aria-pressed=\"true\"" : " aria-pressed=\"false\"") +
+          (disabled ? " disabled" : "") +
+          ">" + escapeHTML(choice.label + " " + choice.count) + "</button>";
+      });
+      els.platformSwitcher.innerHTML = html;
+
+      els.platformSwitcher.querySelectorAll("button").forEach(function(button) {
+        button.addEventListener("click", function() {
+          state.platform = button.dataset.platform || "all";
+          renderPlatformSwitcher();
+          render();
+        });
+      });
+    }
+
+    function localeLabel(item) {
+      if (!item.group || item.group === "root") return "";
+      return item.group;
     }
 
     function sectionKey(item) {
-      return item.locale + " / " + item.deviceLabel + "||" + item.locale + "/" + item.device;
+      var locale = localeLabel(item);
+      var title = locale ? item.platformLabel + " / " + locale : item.platformLabel;
+      return title + "||" + item.platform + "/" + item.group;
     }
 
     function filteredItems(options) {
       options = options || {};
-      var q = state.query.trim().toLowerCase();
+      var platform = Object.prototype.hasOwnProperty.call(options, "platform") ? options.platform : state.platform;
       return state.items.filter(function(item) {
-        if (!options.ignoreLocale && state.locale !== "all" && item.locale !== state.locale) return false;
-        if (state.device !== "all" && item.device !== state.device) return false;
-        if (!q) return true;
-        var haystack = [
-          item.path,
-          item.fileName,
-          item.title,
-          item.locale,
-          item.device,
-          item.deviceLabel,
-          item.slot
-        ].join(" ").toLowerCase();
-        return haystack.indexOf(q) !== -1;
+        return platform === "all" || item.platform === platform;
       });
     }
 
@@ -1122,15 +1299,15 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       return Boolean(a && b && a.path === b.path);
     }
 
-    function uniqueLocales(items) {
+    function uniqueGroups(items) {
       var seen = new Set();
-      var locales = [];
+      var groups = [];
       items.forEach(function(item) {
-        if (seen.has(item.locale)) return;
-        seen.add(item.locale);
-        locales.push(item.locale);
+        if (seen.has(item.group)) return;
+        seen.add(item.group);
+        groups.push(item.group);
       });
-      return locales;
+      return groups;
     }
 
     function indexOfItem(items, target) {
@@ -1140,48 +1317,48 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       return -1;
     }
 
-    function localeNavigationTarget(current, delta) {
+    function groupNavigationTarget(current, delta) {
       if (!current) return null;
 
-      var pool = filteredItems({ ignoreLocale: true });
-      var sameDevicePool = pool.filter(function(item) {
-        return item.device === current.device;
+      var pool = filteredItems({ platform: current.platform });
+      var sameCollectionPool = pool.filter(function(item) {
+        return item.collection === current.collection;
       });
-      var currentGroup = sameDevicePool.filter(function(item) {
-        return item.locale === current.locale;
+      var currentGroup = sameCollectionPool.filter(function(item) {
+        return item.group === current.group;
       });
-      var locales = uniqueLocales(sameDevicePool);
+      var groups = uniqueGroups(sameCollectionPool);
       var nth = indexOfItem(currentGroup, current);
-      var preserveDevice = nth >= 0 && locales.length > 1;
+      var preserveCollection = nth >= 0 && groups.length > 1;
 
-      if (!preserveDevice) {
+      if (!preserveCollection) {
         currentGroup = pool.filter(function(item) {
-          return item.locale === current.locale;
+          return item.group === current.group;
         });
-        locales = uniqueLocales(pool);
+        groups = uniqueGroups(pool);
         nth = indexOfItem(currentGroup, current);
       }
 
-      if (locales.length < 2) return null;
-      var localeIndex = locales.indexOf(current.locale);
-      if (localeIndex < 0) return null;
+      if (groups.length < 2) return null;
+      var groupIndex = groups.indexOf(current.group);
+      if (groupIndex < 0) return null;
 
-      var targetLocale = locales[(localeIndex + delta + locales.length) % locales.length];
-      var targetGroup = (preserveDevice ? sameDevicePool : pool).filter(function(item) {
-        return item.locale === targetLocale;
+      var targetGroup = groups[(groupIndex + delta + groups.length) % groups.length];
+      var targetItems = (preserveCollection ? sameCollectionPool : pool).filter(function(item) {
+        return item.group === targetGroup;
       });
-      if (targetGroup.length === 0) return null;
+      if (targetItems.length === 0) return null;
 
-      var targetNth = nth < 0 ? 0 : Math.min(nth, targetGroup.length - 1);
-      return targetGroup[targetNth];
+      var targetNth = nth < 0 ? 0 : Math.min(nth, targetItems.length - 1);
+      return targetItems[targetNth];
     }
 
     function openItem(item) {
       if (!item) return;
 
-      if (state.locale !== "all" && item.locale !== state.locale) {
-        state.locale = item.locale;
-        els.locale.value = item.locale;
+      if (state.platform !== "all" && item.platform !== state.platform) {
+        state.platform = item.platform;
+        renderPlatformSwitcher();
         render();
       }
 
@@ -1192,13 +1369,15 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
     }
 
     function renderStatus(total, visible) {
-      var locales = new Set(visible.map(function(item) { return item.locale; })).size;
-      var devices = new Set(visible.map(function(item) { return item.device; })).size;
+      var platforms = new Set(visible.map(function(item) { return item.platform; })).size;
+      var locales = new Set(visible.map(function(item) {
+        return item.platform + "/" + item.group;
+      })).size;
       els.status.innerHTML =
         "<span class=\"pill\"><strong>" + visible.length + "</strong> visible</span>" +
         "<span class=\"pill\"><strong>" + total + "</strong> total</span>" +
-        "<span class=\"pill green\"><strong>" + locales + "</strong> locales</span>" +
-        "<span class=\"pill gold\"><strong>" + devices + "</strong> devices</span>";
+        "<span class=\"pill green\"><strong>" + platforms + "</strong> platforms</span>" +
+        "<span class=\"pill gold\"><strong>" + locales + "</strong> locales</span>";
     }
 
     function render() {
@@ -1207,7 +1386,7 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       renderStatus(state.items.length, visible);
 
       if (visible.length === 0) {
-        els.sections.innerHTML = "<div class=\"empty\">No screenshots match the current filters.</div>";
+        els.sections.innerHTML = "<div class=\"empty\">No screenshots match the current platform.</div>";
         return;
       }
 
@@ -1230,8 +1409,8 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
 
         items.forEach(function(item) {
           var meta = [
-            item.locale,
-            item.deviceLabel,
+            item.platformLabel,
+            localeLabel(item),
             dimensions(item),
             bytes(item.size)
           ].filter(Boolean).join(" | ");
@@ -1261,8 +1440,8 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       state.activeIndex = index;
       var item = state.visible[index];
       var meta = [
-        item.locale,
-        item.deviceLabel,
+        item.platformLabel,
+        localeLabel(item),
         dimensions(item),
         bytes(item.size)
       ].filter(Boolean).join(" | ");
@@ -1273,9 +1452,9 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       els.modalImage.alt = item.title;
       els.modalPath.textContent = item.path;
       els.modalOpen.href = url;
-      var canMoveLocale = localeNavigationTarget(item, 1) !== null;
-      els.prevLocale.disabled = !canMoveLocale;
-      els.nextLocale.disabled = !canMoveLocale;
+      var canMoveGroup = groupNavigationTarget(item, 1) !== null;
+      els.prevGroup.disabled = !canMoveGroup;
+      els.nextGroup.disabled = !canMoveGroup;
       els.modal.classList.add("open");
       els.modal.setAttribute("aria-hidden", "false");
     }
@@ -1295,10 +1474,10 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       openModal(nextIndex);
     }
 
-    function moveModalAcrossLocale(delta) {
+    function moveModalAcrossGroup(delta) {
       if (state.activeIndex < 0) return;
       var current = state.visible[state.activeIndex];
-      openItem(localeNavigationTarget(current, delta));
+      openItem(groupNavigationTarget(current, delta));
     }
 
     async function load() {
@@ -1307,42 +1486,25 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
         if (!response.ok) throw new Error(await response.text());
         var data = await response.json();
         state.items = data.items || [];
+        state.platforms = data.platforms || [];
         els.rootPath.textContent = data.root || "";
-        populateSelect(els.locale, data.locales || [], "All locales");
-        populateSelect(els.device, data.devices || [], "All devices");
-        state.locale = els.locale.value;
-        state.device = els.device.value;
+        renderPlatformSwitcher();
         render();
       } catch (error) {
         els.sections.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message || error) + "</div>";
       }
     }
 
-    els.search.addEventListener("input", function(event) {
-      state.query = event.target.value;
-      render();
-    });
-
-    els.locale.addEventListener("change", function(event) {
-      state.locale = event.target.value;
-      render();
-    });
-
-    els.device.addEventListener("change", function(event) {
-      state.device = event.target.value;
-      render();
-    });
-
     els.modalClose.addEventListener("click", closeModal);
     els.prev.addEventListener("click", function() { moveModal(-1); });
     els.next.addEventListener("click", function() { moveModal(1); });
-    els.prevLocale.addEventListener("click", function() { moveModalAcrossLocale(-1); });
-    els.nextLocale.addEventListener("click", function() { moveModalAcrossLocale(1); });
+    els.prevGroup.addEventListener("click", function() { moveModalAcrossGroup(-1); });
+    els.nextGroup.addEventListener("click", function() { moveModalAcrossGroup(1); });
 
     els.modal.addEventListener("click", function(event) {
       var target = event.target;
       if (!(target instanceof Element)) return;
-      if (target === els.modalImage || target.closest(".modal-actions") || target.closest(".nav-button") || target.closest(".locale-nav-button")) return;
+      if (target === els.modalImage || target.closest(".modal-actions") || target.closest(".nav-button") || target.closest(".group-nav-button")) return;
       closeModal();
     });
 
@@ -1359,11 +1521,11 @@ var pageHTML = strings.TrimSpace(`<!doctype html>
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        moveModalAcrossLocale(-1);
+        moveModalAcrossGroup(-1);
       }
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        moveModalAcrossLocale(1);
+        moveModalAcrossGroup(1);
       }
     });
 

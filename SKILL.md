@@ -33,19 +33,25 @@ Use `scripts/prepare_simulator_screenshots.sh` to set a booted iOS simulator to 
 
 ## LOCAL SCREENSHOT GALLERY
 
-When reviewing generated iOS/App Store screenshots, use the bundled single-file Go gallery server instead of adding a project-local viewer. Run it from the app repository root so its default paths resolve against the app:
+When reviewing generated store screenshots, use the bundled single-file Go gallery server instead of adding a project-local viewer. Run it from the app repository root so its default paths resolve against the app:
 
 ```bash
-go run /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/ios_screenshot_gallery.go
+go run /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/screenshot_gallery.go
 ```
 
-By default it scans `ios/fastlane/screenshots`, falling back to `screenshots` if the fastlane folder does not exist. Use flags when needed:
+By default it scans both `ios/fastlane/screenshots` and `android/fastlane/metadata` when both exist, otherwise the available store screenshot directory, falling back to `screenshots`. Use flags when needed:
 
 ```bash
-go run /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/ios_screenshot_gallery.go -dir screenshots -addr 127.0.0.1:8788 -open
+go run /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/screenshot_gallery.go -dir screenshots -addr 127.0.0.1:8788 -open
 ```
 
-The gallery supports locale/device filters, search, large fixed thumbnails, Lucide icons, and modal preview navigation. Do not copy this server into app repositories; execute it in place from the skill directory.
+For Android metadata-only review:
+
+```bash
+go run /Users/youngminz/workspaces/claude-skill-aso-appstore-screenshots/scripts/screenshot_gallery.go -dir android/fastlane/metadata -addr 127.0.0.1:8788 -open
+```
+
+The gallery supports iOS/Android platform switching, locale-separated sections, large fixed thumbnails, Lucide icons, and modal preview navigation. Do not copy this server into app repositories; execute it in place from the skill directory.
 
 ---
 
